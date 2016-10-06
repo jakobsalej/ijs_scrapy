@@ -2,6 +2,8 @@ from lxml import html, etree
 import requests
 import time
 
+# scraping from www.slovenia.info
+
 baseUrl = "http://www.slovenia.info"
 
 

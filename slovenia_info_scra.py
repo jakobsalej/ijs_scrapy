@@ -2,7 +2,7 @@ from lxml import html, etree
 import requests
 import time
 
-# scraping from www.slovenia.info
+# webpage: www.slovenia.info
 
 baseUrl = "http://www.slovenia.info"
 
@@ -35,7 +35,6 @@ def regionGetAttractions(regionUrl):
         attrLinksList = attractionGroup(node)
         n += 1
 
-        # TO-DO: do something with links!
         regionAllLinks(attrLinksList)
 
     return
@@ -121,6 +120,7 @@ def attractionGetData(attractionUrl):
 
     page = requests.get(attractionUrl)
     tree = html.fromstring(page.content)
+    elTree = etree.HTML(page.text)
 
 
     # name of the attraction:
@@ -156,9 +156,23 @@ def attractionGetData(attractionUrl):
     attractionNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
     print("navigation path:", attractionNavPath)
 
-    # description:  TO-DO: formatting
-    attractionDescription = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/text()')
-    print("description:", attractionDescription)
+    # description:
+    attractionDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
+    #print("raw:,", etree.tostring(attractionDescription[0]))
+
+    # we remove unecessary parts (we only need text)
+    childDiv = attractionDescription[0].find('div')
+    #print('Odstranjujem:', etree.tostring(childDiv))
+    attractionDescription[0].remove(childDiv)
+
+    # if we try to remove picture link, we also remove text -> NOT OK!
+    #childLink = attractionDescription[0].find('a')
+    #print('Odstranjujem:', etree.tostring(childLink))
+    #attractionDescription[0].remove(childLink)
+    content = etree.tostring(attractionDescription[0])
+    print("description:", content)
+
+
 
     # main picture: (we have to concatenate it with base url for full picture url)
     baseUrlPictures = "http://www.slovenia.info/"
@@ -169,14 +183,20 @@ def attractionGetData(attractionUrl):
 
     # region    //TO-DO: save link!
     attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
+    if(len(attractionRegion) < 1):
+        attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
     print("region:", attractionRegion)
 
     # destination    //TO-DO: save link!
     attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
+    if(len(attractionDestination) < 1):
+        attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
     print("destination:", attractionDestination)
 
     # place    //TO-DO: save link! (.../a/@href)
     attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
+    if(len(attractionPlace) < 1):
+        attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
     print("place:", attractionPlace)
 
     # GPS coordinates
@@ -200,10 +220,11 @@ attraction2 = "http://www.slovenia.info/en/naravne-znamenitosti-jame/Lake-Bohinj
 attraction3 = "http://www.slovenia.info/si/arhitekturne-znamenitosti/Hi%C5%A1a-Percauz-.htm?arhitekturne_znamenitosti=705&lng=1"
 attraction4 = "http://www.slovenia.info/si/kul-zgod-znamenitosti/Napoleonov-drevored-lip-.htm?kul_zgod_znamenitosti=11879&lng=1"
 attraction5 = "http://www.slovenia.info/si/ponudniki-podezelje/Olive-in-olj%C4%8Dno-olje-na-Kmetiji-Bojanc-.htm?ponudniki_podezelje=438&lng=1"
-attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"     #make it work for this page also!(add phone num, edit place...)
-attractionGetData(attraction6)
-#attractionGetData(attraction2)
+attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"
+attraction7 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Izvir-kisle-vode-na-Jezerskem-.htm?naravne_znamenitosti_jame=169&lng=1"
+attractionGetData(attraction7)
+attractionGetData(attraction1)
 
 region1 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
-regionGetAttractions(region2)
+#regionGetAttractions(region2)

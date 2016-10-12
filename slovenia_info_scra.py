@@ -137,9 +137,9 @@ def attractionGetData(attractionUrl):
     print("phone:", attractionPhone)
 
     # email:
-    attractionEmail = tree.xpath(
-        '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propEmail"]/div[2]/text()')
-    print("email:", attractionEmail)
+    #attractionEmail = tree.xpath(
+    #    '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propEmail"]/div[2]/text()')
+    #print("email:", attractionEmail)
 
     # email does not work, problem with js (link is not visible to lxml?)
     attractionEmail = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[2]/div[1]/text()')
@@ -163,9 +163,10 @@ def attractionGetData(attractionUrl):
     # we remove unecessary parts (we only need text)
     childDiv = attractionDescription[0].find('div')
     #print('Odstranjujem:', etree.tostring(childDiv))
-    attractionDescription[0].remove(childDiv)
+    if childDiv is not None:
+        attractionDescription[0].remove(childDiv)
 
-    # if we try to remove picture link, we also remove text -> NOT OK!
+    # if we try to remove picture link, we also remove text -> NOT OK! TO-DO: http://stackoverflow.com/questions/22967659/removing-an-element-but-not-the-text-after-it
     #childLink = attractionDescription[0].find('a')
     #print('Odstranjujem:', etree.tostring(childLink))
     #attractionDescription[0].remove(childLink)
@@ -227,4 +228,4 @@ attractionGetData(attraction1)
 
 region1 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
-#regionGetAttractions(region2)
+regionGetAttractions(region2)

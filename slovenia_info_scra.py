@@ -1,15 +1,13 @@
 from lxml import html, etree
 import requests
 import time
+import datetime
+from peewee import *
 
 # getting data from webpage www.slovenia.info using lxml and Xpath
 
 baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
-
-
-
-
 
 
 
@@ -31,20 +29,6 @@ def selectRegion():
         'http://www.slovenia.info/si/Regije/Spodnjeposavska.htm?_ctg_regije=133&lng=1',
         'http://www.slovenia.info/si/Regije/Zasavska.htm?_ctg_regije=12&lng=1'
     ]
-
-    regionsAttrs = ['http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=9&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=17&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=11&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=15&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=134&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=121&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=14&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=16&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=133&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=12&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
-                    ]
 
     for region in regions:
         # wait 0.3 sec
@@ -173,16 +157,16 @@ def regionGetData(regionUrl):
     print('link to picture:', pictureLink)
 
     # attractions link
-    attrLinks = elTree.xpath('//*[@id="wpsubmenuwp_C112_I10_W38_L1_"]/a[4]/@href')
+    attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
     if len(attrLinks) > 0:
         attrLinks = baseUrl + attrLinks[0]
     print('attractions:', attrLinks)
+    print('----------------------------------------\n')
 
     # lets get attraction links
-    regionGetAttractions(attrLinks)
+    #regionGetAttractions(attrLinks)
 
     return
-
 
 
 
@@ -241,13 +225,11 @@ def attractionGetData(attractionUrl):
         attractionDescription[0].remove(childDiv)
 
     # if we try to remove picture link, we also remove text -> NOT OK! TO-DO: http://stackoverflow.com/questions/22967659/removing-an-element-but-not-the-text-after-it
-    #childLink = attractionDescription[0].find('a')
-    #print('Odstranjujem:', etree.tostring(childLink))
-    #attractionDescription[0].remove(childLink)
+    # childLink = attractionDescription[0].find('a')
+    # print('Odstranjujem:', etree.tostring(childLink))
+    # attractionDescription[0].remove(childLink)
     content = etree.tostring(attractionDescription[0])
     print("description:", content)
-
-
 
     # main picture: (we have to concatenate it with base url for full picture url)
     attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
@@ -257,19 +239,19 @@ def attractionGetData(attractionUrl):
 
     # region    //TO-DO: save link!
     attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
-    if(len(attractionRegion) < 1):
+    if len(attractionRegion) < 1:
         attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
     print("region:", attractionRegion)
 
     # destination    //TO-DO: save link!
     attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
-    if(len(attractionDestination) < 1):
+    if len(attractionDestination) < 1:
         attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
     print("destination:", attractionDestination)
 
     # place    //TO-DO: save link! (.../a/@href)
     attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
-    if(len(attractionPlace) < 1):
+    if len(attractionPlace) < 1:
         attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
     print("place:", attractionPlace)
 
@@ -288,6 +270,44 @@ def attractionGetData(attractionUrl):
 
 
 
+def initDB():
+
+    db = SqliteDatabase('slovenia.db', user = 'admin', passwd = 'sudosudo1')
+
+    class BaseModel(Model):
+        class Meta:
+            database = db
+
+    class Region(BaseModel):
+        name = CharField()
+        link = CharField()
+        description = CharField()
+        picture = CharField()
+        timestamp = DateTimeField(default=datetime.datetime.now)
+
+
+
+    return
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #just for testing purposes
 attraction1 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Vintgar-Gorge-.htm?naravne_znamenitosti_jame=110&lng=1&redirected=1"
 attraction2 = "http://www.slovenia.info/en/naravne-znamenitosti-jame/Lake-Bohinj-.htm?naravne_znamenitosti_jame=1746&lng=1"
@@ -297,12 +317,14 @@ attraction5 = "http://www.slovenia.info/si/ponudniki-podezelje/Olive-in-olj%C4%8
 attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"
 attraction7 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Izvir-kisle-vode-na-Jezerskem-.htm?naravne_znamenitosti_jame=169&lng=1"
 attraction8 = 'http://www.slovenia.info/si/Biseri-narave/Bohinjsko-jezero-.htm?naravne_znamenitosti_jame=1745&lng=1'
-attractionGetData(attraction7)
-attractionGetData(attraction1)
-attractionGetData(attraction8)
+#attractionGetData(attraction7)
+#attractionGetData(attraction1)
+#attractionGetData(attraction8)
 
 region1 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 #regionGetAttractions(region2)
 
 #regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')
+
+selectRegion()

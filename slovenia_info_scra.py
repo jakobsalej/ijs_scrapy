@@ -2,12 +2,54 @@ from lxml import html, etree
 import requests
 import time
 
-# webpage: www.slovenia.info
+# getting data from webpage www.slovenia.info using lxml and Xpath
 
 baseUrl = "http://www.slovenia.info"
+baseUrlPictures = "http://www.slovenia.info/"
+
+
+
+
+
 
 
 def selectRegion():
+
+    # Gorenjska, Goriška, Obalno - kraška, Osrednjeslovenska, Podravska, Notranjsko - kraška, Jugovzhodna Slovenija, Koroška, Savinjska, Pomurska, Spodnjeposavska, Zasavska
+
+    regions = [
+        'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1',
+        'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=1',
+        'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=1',
+        'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=1',
+        'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=1',
+        'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=1',
+        'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=1',
+        'http://www.slovenia.info/si/Regije/Koro%C5%A1ka.htm?_ctg_regije=121&lng=1',
+        'http://www.slovenia.info/si/Regije/Savinjska.htm?_ctg_regije=14&lng=1',
+        'http://www.slovenia.info/si/Regije/Pomurska.htm?_ctg_regije=16&lng=1',
+        'http://www.slovenia.info/si/Regije/Spodnjeposavska.htm?_ctg_regije=133&lng=1',
+        'http://www.slovenia.info/si/Regije/Zasavska.htm?_ctg_regije=12&lng=1'
+    ]
+
+    regionsAttrs = ['http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=9&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=17&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=11&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=15&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=134&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=121&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=14&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=16&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=133&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    'http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=12&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1',
+                    ]
+
+    for region in regions:
+        # wait 0.3 sec
+        time.sleep(.300)
+        regionGetData(region)
 
     return
 
@@ -112,6 +154,37 @@ def regionAllLinks(links):
     return
 
 
+def regionGetData(regionUrl):
+
+    # get data from individual region using XPath
+    print('link:', regionUrl)
+
+    page = requests.get(regionUrl)
+    elTree = etree.HTML(page.text)
+
+    # description
+    description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
+    print('data:', etree.tostring(description[0]))
+
+    # picture link
+    pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
+    if len(pictureLink) > 0:
+        pictureLink = baseUrlPictures + pictureLink[0]
+    print('link to picture:', pictureLink)
+
+    # attractions link
+    attrLinks = elTree.xpath('//*[@id="wpsubmenuwp_C112_I10_W38_L1_"]/a[4]/@href')
+    if len(attrLinks) > 0:
+        attrLinks = baseUrl + attrLinks[0]
+    print('attractions:', attrLinks)
+
+    # lets get attraction links
+    regionGetAttractions(attrLinks)
+
+    return
+
+
+
 
 def attractionGetData(attractionUrl):
 
@@ -142,8 +215,9 @@ def attractionGetData(attractionUrl):
     #print("email:", attractionEmail)
 
     # email does not work, problem with js (link is not visible to lxml?)
-    attractionEmail = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[2]/div[1]/text()')
-    print("email:", attractionEmail)
+    attractionEmail = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[2]')
+    if len(attractionEmail) > 0:
+        print("email:", etree.tostring(attractionEmail[0]))
 
     # webpage:
     attractionWebpage = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propRow propWWW"]/a/text()')
@@ -176,7 +250,6 @@ def attractionGetData(attractionUrl):
 
 
     # main picture: (we have to concatenate it with base url for full picture url)
-    baseUrlPictures = "http://www.slovenia.info/"
     attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
     if len(attractionPictureMain) > 0:
         attractionPictureMain = baseUrlPictures + attractionPictureMain[0]
@@ -223,9 +296,13 @@ attraction4 = "http://www.slovenia.info/si/kul-zgod-znamenitosti/Napoleonov-drev
 attraction5 = "http://www.slovenia.info/si/ponudniki-podezelje/Olive-in-olj%C4%8Dno-olje-na-Kmetiji-Bojanc-.htm?ponudniki_podezelje=438&lng=1"
 attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"
 attraction7 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Izvir-kisle-vode-na-Jezerskem-.htm?naravne_znamenitosti_jame=169&lng=1"
+attraction8 = 'http://www.slovenia.info/si/Biseri-narave/Bohinjsko-jezero-.htm?naravne_znamenitosti_jame=1745&lng=1'
 attractionGetData(attraction7)
 attractionGetData(attraction1)
+attractionGetData(attraction8)
 
 region1 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
-regionGetAttractions(region2)
+#regionGetAttractions(region2)
+
+#regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')

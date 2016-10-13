@@ -10,6 +10,46 @@ baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
 
 
+def connectDB():
+    db = PostgresqlDatabase(
+        'slovenia_db',
+        user='adminslo',
+        password='slo',
+        host='localhost',
+    )
+
+    return db
+
+
+class BaseModel(Model):
+    class Meta:
+        database = connectDB()
+
+
+class Region(BaseModel):
+    name = CharField()
+    link = CharField()
+    description = TextField()
+    picture = CharField()
+    timestamp = DateTimeField(default=datetime.datetime.now)
+
+
+class Attraction(BaseModel):
+    name = CharField()
+    link = CharField()
+    address = CharField()
+    phone = CharField()
+    webpage = CharField()
+    tags = CharField()
+    description = TextField()
+    picture = CharField()
+    region = ForeignKeyField(Region, related_name='attractions')
+    destination = CharField()
+    place = CharField()
+    gpsX = DoubleField()
+    gpsY = DoubleField()
+    timestamp = DateTimeField(default=datetime.datetime.now)
+
 
 def selectRegion():
 
@@ -146,9 +186,14 @@ def regionGetData(regionUrl):
     page = requests.get(regionUrl)
     elTree = etree.HTML(page.text)
 
+    # name
+    name = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[2]/h1/text()')
+    print('name:', name)
+
     # description
     description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
-    print('data:', etree.tostring(description[0]))
+    description = etree.tostring(description[0])
+    print('data:', description)
 
     # picture link
     pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
@@ -162,6 +207,14 @@ def regionGetData(regionUrl):
         attrLinks = baseUrl + attrLinks[0]
     print('attractions:', attrLinks)
     print('----------------------------------------\n')
+
+    #saving to db
+    db = connectDB()
+    db.connect()
+    print('data:', description)
+    newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
+    newRegion.save()
+
 
     # lets get attraction links
     #regionGetAttractions(attrLinks)
@@ -270,33 +323,17 @@ def attractionGetData(attractionUrl):
 
 
 
+
 def initDB():
+    db = connectDB()
 
-    db = SqliteDatabase('slovenia.db', user = 'admin', passwd = 'sudosudo1')
-
-    class BaseModel(Model):
-        class Meta:
-            database = db
-
-    class Region(BaseModel):
-        name = CharField()
-        link = CharField()
-        description = CharField()
-        picture = CharField()
-        timestamp = DateTimeField(default=datetime.datetime.now)
-
+    # lets connect
+    db.connect()
+    db.create_tables([Region, Attraction])
+    db.close()
 
 
     return
-
-
-
-
-
-
-
-
-
 
 
 
@@ -317,7 +354,7 @@ attraction5 = "http://www.slovenia.info/si/ponudniki-podezelje/Olive-in-olj%C4%8
 attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"
 attraction7 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Izvir-kisle-vode-na-Jezerskem-.htm?naravne_znamenitosti_jame=169&lng=1"
 attraction8 = 'http://www.slovenia.info/si/Biseri-narave/Bohinjsko-jezero-.htm?naravne_znamenitosti_jame=1745&lng=1'
-#attractionGetData(attraction7)
+attractionGetData(attraction7)
 #attractionGetData(attraction1)
 #attractionGetData(attraction8)
 
@@ -328,3 +365,5 @@ region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_
 #regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')
 
 selectRegion()
+
+#initDB()

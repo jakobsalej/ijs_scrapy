@@ -9,6 +9,9 @@ from peewee import *
 baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
 
+# log file
+logf = open("errors.log", "w")
+
 
 def connectDB():
     db = PostgresqlDatabase(
@@ -41,14 +44,17 @@ class Attraction(BaseModel):
     phone = CharField()
     webpage = CharField()
     tags = CharField()
+    type = CharField()
     description = TextField()
     picture = CharField()
+    regionName = CharField()
     region = ForeignKeyField(Region, related_name='attractions')
     destination = CharField()
     place = CharField()
     gpsX = DoubleField()
     gpsY = DoubleField()
     timestamp = DateTimeField(default=datetime.datetime.now)
+
 
 
 def selectRegion():
@@ -79,29 +85,30 @@ def selectRegion():
 
 
 
-def regionGetAttractions(regionUrl):
+def regionGetAttractions(regionUrl, regionObject):
 
     # get attraction links from [ Home -> Regions -> Attractions ] page
 
     page = requests.get(regionUrl)
     tree = html.fromstring(page.content)
     linksAttractions = tree.xpath('//*[@id="tdMainCenter"]//p/a[2]/@href')
-    print('links:', linksAttractions)
-    print('number of links:', len(linksAttractions))
+    #print('links:', linksAttractions)
+    #print('number of links:', len(linksAttractions))
 
     # finds those div-s that are named "resultsBox..", they contain links of attractions (sorted by type: churches, lakes, rivers,..)
     regexpNS = "http://exslt.org/regular-expressions"
     attrGroups = tree.xpath('//*[@id="tdMainCenter"]//div[re:test(@id, "^resultsBox")]', namespaces={'re': regexpNS})
-    print('num of groups:', len(attrGroups))
+    #print('num of groups:', len(attrGroups))
 
     # we pass on whole tree element so we can extract links (root is div named resultsBox; it contains all links of attractions)
     n = 1
     for node in attrGroups:
-        print(n, ":", node.tag, node.attrib['id'])
+        #print(n, ":", node.tag, node.attrib['id'])
         attrLinksList = attractionGroup(node)
+        print('Starting with group', n, '- number of attractions:', len(attrLinksList))
+        regionAllLinks(attrLinksList, regionObject)
+        print('Finished with group', n, '\n------------------------\n')
         n += 1
-
-        regionAllLinks(attrLinksList)
 
     return
 
@@ -119,7 +126,7 @@ def attractionGroup(group):
         attrLinksList.append(link.attrib['href'])
         #print('adding link:', link.attrib['href'])
 
-    print("Number of links in group:", len(attrLinksList))
+    #print("Number of links in group:", len(attrLinksList))
 
     # we need selected div ID because once we load a new link (page two, for example), we have to know which group are we looking at (all the links from other groups are still visible)
     groupId = group.attrib['id']
@@ -128,7 +135,7 @@ def attractionGroup(group):
     # we don't need to 'click' on the first link (we already have those attractions, they are shown by default)
     count = 0
     for pageLinks in group.iterfind('div[@class="subbox"]/div[@class="paging"]/div[@class="links"]/a'):
-        print("Page link found:", pageLinks.tag, pageLinks.attrib['href'])
+        #print("Page link found:", pageLinks.tag, pageLinks.attrib['href'])
 
         if count != 0:
             # wait 0.3 sec
@@ -137,7 +144,7 @@ def attractionGroup(group):
             # adding links from page 2, 3, ..
             attractionsPage = attrGroupSubPage(pageLinks.attrib['href'], groupId)
             attrLinksList.extend(attractionsPage)
-            print('new number of links:', len(attrLinksList))
+            #print('number of attractions in group:', len(attrLinksList))
 
         count += 1
 
@@ -150,7 +157,7 @@ def attrGroupSubPage(link, id):
     # find the correct div based on given id, extract links and return them
 
     fullLink = baseUrl + link
-    print("going to page:", fullLink)
+    #print("going to page:", fullLink)
 
     page = requests.get(fullLink)
     tree = html.fromstring(page.content)
@@ -159,21 +166,22 @@ def attrGroupSubPage(link, id):
     searchStr = '//*[@id="tdMainCenter"]/div[@id="' + id + '"]//p/a[2]/@href'
 
     linksPageAttractions = tree.xpath(searchStr)
-    print('new links:', linksPageAttractions)
-    print('number of new links:', len(linksPageAttractions))
+    #print('new links:', linksPageAttractions)
+    #print('number of new links:', len(linksPageAttractions))
 
     return linksPageAttractions
 
 
 
-def regionAllLinks(links):
+def regionAllLinks(links, regionObject):
 
     # lets get data from attraction links!
-
+    n = 1
     for link in links:
         fullLink = baseUrl + link
         time.sleep(.300)
-        attractionGetData(fullLink)
+        attractionGetData(fullLink, regionObject, n, len(links))
+        n += 1
 
     return
 
@@ -181,168 +189,200 @@ def regionAllLinks(links):
 def regionGetData(regionUrl):
 
     # get data from individual region using XPath
-    print('link:', regionUrl)
+    #print('region:', regionUrl)
 
     page = requests.get(regionUrl)
     elTree = etree.HTML(page.text)
 
     # name
     name = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[2]/h1/text()')
-    print('name:', name)
+    print('region name:', name)
 
     # description
     description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
     description = etree.tostring(description[0])
-    print('data:', description)
+    #print('data:', description)
 
     # picture link
     pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
     if len(pictureLink) > 0:
         pictureLink = baseUrlPictures + pictureLink[0]
-    print('link to picture:', pictureLink)
+    #print('link to picture:', pictureLink)
 
     # attractions link
     attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
     if len(attrLinks) > 0:
         attrLinks = baseUrl + attrLinks[0]
-    print('attractions:', attrLinks)
-    print('----------------------------------------\n')
+    #print('attractions:', attrLinks)
+    #print('----------------------------------------\n')
 
     #saving to db
-    db = connectDB()
-    db.connect()
-    print('data:', description)
     newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
     newRegion.save()
 
-
     # lets get attraction links
-    #regionGetAttractions(attrLinks)
+    regionGetAttractions(attrLinks, newRegion)
+
+    print('FINISHED WITH REGION', name, '\n---------------------------------------------\n')
 
     return
 
 
 
-def attractionGetData(attractionUrl):
-
-    # get data from individual attraction using XPath
-    print('link:', attractionUrl)
-
-    page = requests.get(attractionUrl)
-    tree = html.fromstring(page.content)
-    elTree = etree.HTML(page.text)
+def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
 
-    # name of the attraction:
-    attractionName = tree.xpath('// *[ @ id = "tdMainCenter"] / div[3] / div[1] / div[4] / h1/text()')
-    print("name:", attractionName)
+    try:
 
-    # address:
-    attractionAddress = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propLocation"]/div[2]/text()')
-    print("address:", attractionAddress)
+        # get data from individual attraction using XPath
+        #print('link:', attractionUrl)
 
-    # phone:
-    attractionPhone = tree.xpath(
-        '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propPhone"]/div[2]/text()')
-    print("phone:", attractionPhone)
+        page = requests.get(attractionUrl)
+        tree = html.fromstring(page.content)
+        elTree = etree.HTML(page.text)
 
-    # email:
-    #attractionEmail = tree.xpath(
-    #    '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propEmail"]/div[2]/text()')
-    #print("email:", attractionEmail)
+        # name of the attraction:
+        attractionName = tree.xpath('// *[ @ id = "tdMainCenter"] / div[3] / div[1] / div[4] / h1/text()')
+        if len(attractionName) == 0:
+            attractionName = ['']
 
-    # email does not work, problem with js (link is not visible to lxml?)
-    attractionEmail = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[2]')
-    if len(attractionEmail) > 0:
-        print("email:", etree.tostring(attractionEmail[0]))
-
-    # webpage:
-    attractionWebpage = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propRow propWWW"]/a/text()')
-
-    # in case link is split, we have to merge it
-    attractionWebpage = ''.join(attractionWebpage)
-    print("webpage:", attractionWebpage)
-
-    # webpage path to attraction:
-    attractionNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
-    print("navigation path:", attractionNavPath)
-
-    # description:
-    attractionDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
-    #print("raw:,", etree.tostring(attractionDescription[0]))
-
-    # we remove unecessary parts (we only need text)
-    childDiv = attractionDescription[0].find('div')
-    #print('Odstranjujem:', etree.tostring(childDiv))
-    if childDiv is not None:
-        attractionDescription[0].remove(childDiv)
-
-    # if we try to remove picture link, we also remove text -> NOT OK! TO-DO: http://stackoverflow.com/questions/22967659/removing-an-element-but-not-the-text-after-it
-    # childLink = attractionDescription[0].find('a')
-    # print('Odstranjujem:', etree.tostring(childLink))
-    # attractionDescription[0].remove(childLink)
-    content = etree.tostring(attractionDescription[0])
-    print("description:", content)
-
-    # main picture: (we have to concatenate it with base url for full picture url)
-    attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
-    if len(attractionPictureMain) > 0:
-        attractionPictureMain = baseUrlPictures + attractionPictureMain[0]
-    print("link to main picture:", attractionPictureMain)
-
-    # region    //TO-DO: save link!
-    attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
-    if len(attractionRegion) < 1:
-        attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
-    print("region:", attractionRegion)
-
-    # destination    //TO-DO: save link!
-    attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
-    if len(attractionDestination) < 1:
-        attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
-    print("destination:", attractionDestination)
-
-    # place    //TO-DO: save link! (.../a/@href)
-    attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
-    if len(attractionPlace) < 1:
-        attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
-    print("place:", attractionPlace)
-
-    # GPS coordinates
-    attractionGPS = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row gps"]/a/text()')
-    print("gps [x, y]:", attractionGPS)
-
-    print('------------------------------------------')
-    print('\n')
+        print(attractionName[0], '(', n, '/', numLinks, ')')
 
 
-    # TO-DO: save all this somehow, somewhere
+        # address:
+        attractionAddress = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propLocation"]/div[2]/text()')
+        if len(attractionAddress) == 0:
+            attractionAddress = ['']
+        #print("address:", attractionAddress)
+
+        # phone:
+        attractionPhone = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propPhone"]/div[2]/text()')
+        if len(attractionPhone) == 0:
+            attractionPhone = ['']
+        #print("phone:", attractionPhone)
+
+        # email does not work, problem with js (link is not visible to lxml?)
+        attractionEmail = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[2]')
+        #if len(attractionEmail) > 0:
+            #print("email:", etree.tostring(attractionEmail[0]))
+
+        # webpage:
+        attractionWebpage = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propRow propWWW"]/a/text()')
+
+        # in case link is split, we have to merge it
+        attractionWebpage = ''.join(attractionWebpage)
+        #print("webpage:", attractionWebpage)
+
+        # webpage path to attraction, we remove the first one as its always "Domov" and save the one before last as it tells as type of attraction
+        attractionNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
+        attractionType = attractionNavPath[len(attractionNavPath)-2]
+        attractionNavPath.pop(0)
+        attractionNavPath = ','.join(attractionNavPath)
+        #print("navigation path:", attractionNavPath)
+
+        # description:
+        attractionDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
+        #print("raw:,", etree.tostring(attractionDescription[0]))
+
+        # we remove unecessary parts (we only need text)
+        childDiv = attractionDescription[0].find('div')
+        #print('Odstranjujem:', etree.tostring(childDiv))
+        if childDiv is not None:
+            attractionDescription[0].remove(childDiv)
+
+        # if we try to remove picture link, we also remove text -> NOT OK! TO-DO: http://stackoverflow.com/questions/22967659/removing-an-element-but-not-the-text-after-it
+        # childLink = attractionDescription[0].find('a')
+        # print('Odstranjujem:', etree.tostring(childLink))
+        # attractionDescription[0].remove(childLink)
+        content = etree.tostring(attractionDescription[0])
+        #print("description:", content)
+
+        # main picture: (we have to concatenate it with base url for full picture url)
+        attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
+        if len(attractionPictureMain) > 0:
+            attractionPictureMain = baseUrlPictures + attractionPictureMain[0]
+        #print("link to main picture:", attractionPictureMain)
+
+        # region
+        attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
+        if len(attractionRegion) < 1:
+            attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
+            if len(attractionRegion) == 0:
+                attractionRegion = ['']
+        #print("region:", attractionRegion)
+
+        # destination
+        attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
+        if len(attractionDestination) < 1:
+            attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
+            if len(attractionDestination) == 0:
+                attractionDestination = ['']
+        #print("destination:", attractionDestination)
+
+        # place
+        attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
+        if len(attractionPlace) < 1:
+            attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
+            if len(attractionPlace) == 0:
+                attractionPlace = ['']
+        #print("place:", attractionPlace)
+
+        # GPS coordinates
+        attractionGPS = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row gps"]/a/text()')
+        if len(attractionGPS):
+            gpsX = float(attractionGPS[0].replace(',', '.'))
+            gpsY = float(attractionGPS[1].replace(',', '.'))
+        else:
+            gpsX = -1
+            gpsY = -1
+
+        #print("gps [x, y]:", attractionGPS)
+
+        #print('------------------------------------------\n')
+
+        # TO-DO: save all this somehow, somewhere
+        newAttr = Attraction(name = attractionName[0],
+                             link = attractionUrl,
+                             address = attractionAddress[0],
+                             phone = attractionPhone[0],
+                             webpage = attractionWebpage,
+                             tags = attractionNavPath,
+                             type = attractionType,
+                             description = content,
+                             picture = attractionPictureMain,
+                             regionName = attractionRegion[0],
+                             region = regionObject,
+                             destination = attractionDestination[0],
+                             place = attractionPlace[0],
+                             gpsX = gpsX,
+                             gpsY = gpsY
+                             )
+
+        newAttr.save()
+
+    except Exception as e:
+        logf.write("Failed to get data from link " + attractionUrl + ' : ' + str(e) + '\n')
+
 
     return
-
-
 
 
 
 def initDB():
     db = connectDB()
 
-    # lets connect
-    db.connect()
+    # create tables
     db.create_tables([Region, Attraction])
-    db.close()
-
 
     return
 
 
 
 
-
-
-
-
-
+# starting
+db = connectDB()
+db.connect()
 
 
 #just for testing purposes
@@ -354,16 +394,26 @@ attraction5 = "http://www.slovenia.info/si/ponudniki-podezelje/Olive-in-olj%C4%8
 attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"
 attraction7 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Izvir-kisle-vode-na-Jezerskem-.htm?naravne_znamenitosti_jame=169&lng=1"
 attraction8 = 'http://www.slovenia.info/si/Biseri-narave/Bohinjsko-jezero-.htm?naravne_znamenitosti_jame=1745&lng=1'
-attractionGetData(attraction7)
-#attractionGetData(attraction1)
-#attractionGetData(attraction8)
+attr_error = 'http://booking.slovenia.info/slovenia/sl/accommodation/detail/STO/BEB93FCD-C176-4A89-847D-5CEAB7485BB7/Turisti%C4%8Dna_kmetija_Pri__Biscu?customHeader=true&customFooter=true&cutomID='
 
+#newRegion = Region(name='test', link='test', description='test', picture='test')
+#newRegion.save()
+
+#attractionGetData(attr_error, newRegion, 1, 2)
+#attractionGetData(attraction6, newRegion, 2, 2)
+#attractionGetData(attraction8)
 region1 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
 #regionGetAttractions(region2)
-
 #regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')
 
-selectRegion()
+
 
 #initDB()
+selectRegion()
+db.close()
+
+
+
+
+

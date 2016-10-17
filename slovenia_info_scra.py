@@ -4,24 +4,14 @@ import time
 import datetime
 from peewee import *
 
+
 # getting data from webpage www.slovenia.info using lxml and Xpath
 
 baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
 
 # log file
-logf = open("errors2.log", "w")
-
-
-def connectDB():
-    db = PostgresqlDatabase(
-        'slovenia_db',
-        user='adminslo',
-        password='slo',
-        host='localhost',
-    )
-
-    return db
+logf = open("errors.log", "w")
 
 
 class BaseModel(Model):
@@ -56,7 +46,32 @@ class Attraction(BaseModel):
     timestamp = DateTimeField(default=datetime.datetime.now)
 
 
+
+def connectDB():
+    db = PostgresqlDatabase(
+        'slovenia_db',
+        user='adminslo',
+        password='slo',
+        host='localhost',
+    )
+
+    return db
+
+
+
+def initDB(db):
+
+    # create tables
+    db.create_tables([Region, Attraction])
+
+    return
+
+
+
 def getRegion(name):
+
+    # find Region by name in db
+
     try:
         region = Region.get(Region.name == name)
         print('Getting region', region.name)
@@ -64,8 +79,14 @@ def getRegion(name):
 
     except:
         print('ERROR: No such entry found.')
+        return None
+
+
 
 def getAttraction(link):
+
+    # find Attraction by link (unique for every attr.) in db
+
     try:
         attraction = Attraction.get(Attraction.link == link)
         print('Getting attraction', attraction.name)
@@ -105,9 +126,52 @@ def selectRegion():
 
 
 
+def regionGetData(regionUrl):
+
+    # get data from individual region
+    #print('region:', regionUrl)
+
+    page = requests.get(regionUrl)
+    elTree = etree.HTML(page.text)
+
+    # name
+    name = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[2]/h1/text()')
+    print('region name:', name)
+
+    # description
+    description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
+    description = etree.tostring(description[0])
+    #print('data:', description)
+
+    # picture link
+    pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
+    if len(pictureLink) > 0:
+        pictureLink = baseUrlPictures + pictureLink[0]
+    #print('link to picture:', pictureLink)
+
+    # attractions link
+    attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
+    if len(attrLinks) > 0:
+        attrLinks = baseUrl + attrLinks[0]
+    #print('attractions:', attrLinks)
+    #print('----------------------------------------\n')
+
+    #saving to db
+    newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
+    newRegion.save()
+
+    # let's get attractions from attraction link
+    regionGetAttractions(attrLinks, newRegion)
+
+    print('FINISHED WITH REGION', name, '\n---------------------------------------------\n')
+
+    return
+
+
+
 def regionGetAttractions(regionUrl, regionObject):
 
-    # get attraction links from [ Home -> Regions -> Attractions ] page
+    # get attraction links from [ Home -> Regions -> Some region -> Attractions ] page
 
     page = requests.get(regionUrl)
     tree = html.fromstring(page.content)
@@ -148,7 +212,7 @@ def attractionGroup(group):
 
     #print("Number of links in group:", len(attrLinksList))
 
-    # we need selected div ID because once we load a new link (page two, for example), we have to know which group are we looking at (all the links from other groups are still visible)
+    # we need selected div's ID because once we load a new link (page two, for example), we have to know which group are we looking at (all the links from other groups are still visible, just collapsed)
     groupId = group.attrib['id']
 
     # we look for the links of pages (if there are more than 50 attractions in a group, they are paginated)
@@ -161,7 +225,7 @@ def attractionGroup(group):
             # wait 0.3 sec
             time.sleep(.300)
 
-            # adding links from page 2, 3, ..
+            # adding links from page 2, 3, .. of selected group
             attractionsPage = attrGroupSubPage(pageLinks.attrib['href'], groupId)
             attrLinksList.extend(attractionsPage)
             #print('number of attractions in group:', len(attrLinksList))
@@ -195,7 +259,8 @@ def attrGroupSubPage(link, id):
 
 def regionAllLinks(links, regionObject):
 
-    # lets get data from attraction links!
+    # now we have links of all the attractions of specific region, lets go through them and get data out
+
     n = 1
     for link in links:
         fullLink = baseUrl + link
@@ -206,57 +271,13 @@ def regionAllLinks(links, regionObject):
     return
 
 
-def regionGetData(regionUrl):
-
-    # get data from individual region using XPath
-    #print('region:', regionUrl)
-
-    page = requests.get(regionUrl)
-    elTree = etree.HTML(page.text)
-
-    # name
-    name = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[2]/h1/text()')
-    print('region name:', name)
-
-    # description
-    description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
-    description = etree.tostring(description[0])
-    #print('data:', description)
-
-    # picture link
-    pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
-    if len(pictureLink) > 0:
-        pictureLink = baseUrlPictures + pictureLink[0]
-    #print('link to picture:', pictureLink)
-
-    # attractions link
-    attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
-    if len(attrLinks) > 0:
-        attrLinks = baseUrl + attrLinks[0]
-    #print('attractions:', attrLinks)
-    #print('----------------------------------------\n')
-
-    #saving to db
-    newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
-    newRegion.save()
-
-    # lets get attraction links
-    regionGetAttractions(attrLinks, newRegion)
-
-    print('FINISHED WITH REGION', name, '\n---------------------------------------------\n')
-
-    return
-
-
 
 def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
+    # get data from individual attraction
+    # print('link:', attractionUrl)
 
     try:
-
-        # get data from individual attraction using XPath
-        #print('link:', attractionUrl)
-
         page = requests.get(attractionUrl)
         tree = html.fromstring(page.content)
         elTree = etree.HTML(page.text)
@@ -267,7 +288,6 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
             attractionName = ['']
 
         print(attractionName[0], '(', n, '/', numLinks, ')')
-
 
         # address:
         attractionAddress = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propLocation"]/div[2]/text()')
@@ -305,7 +325,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
         attractionDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
         #print("raw:,", etree.tostring(attractionDescription[0]))
 
-        # we remove unecessary parts (we only need text)
+        # we remove unecessary parts (we only need body text)
         childDiv = attractionDescription[0].find('div')
         #print('Odstranjujem:', etree.tostring(childDiv))
         if childDiv is not None:
@@ -313,12 +333,12 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
         # if we try to remove picture link, we also remove text -> NOT OK! TO-DO: http://stackoverflow.com/questions/22967659/removing-an-element-but-not-the-text-after-it
         # childLink = attractionDescription[0].find('a')
-        # print('Odstranjujem:', etree.tostring(childLink))
+        # print('Removing:', etree.tostring(childLink))
         # attractionDescription[0].remove(childLink)
         content = etree.tostring(attractionDescription[0])
         #print("description:", content)
 
-        # main picture: (we have to concatenate it with base url for full picture url)
+        # main picture: (we have to merge it with base url for full picture url)
         attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
         if len(attractionPictureMain) > 0:
             attractionPictureMain = baseUrlPictures + attractionPictureMain[0]
@@ -361,6 +381,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
         #print('------------------------------------------\n')
 
+        # saving to DB
         newAttr = Attraction(name = attractionName[0],
                              link = attractionUrl,
                              address = attractionAddress[0],
@@ -382,17 +403,6 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
     except Exception as e:
         logf.write("Failed to get data from link " + attractionUrl + ' : ' + str(e) + '\n')
-
-
-    return
-
-
-
-def initDB():
-    db = connectDB()
-
-    # create tables
-    db.create_tables([Region, Attraction])
 
     return
 
@@ -427,7 +437,7 @@ region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_
 #regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')
 
 
-#initDB()
+#initDB(db)
 #selectRegion()
 db.close()
 

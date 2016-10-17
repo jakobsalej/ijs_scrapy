@@ -6,12 +6,28 @@ from peewee import *
 
 
 # getting data from webpage www.slovenia.info using lxml and Xpath
+# using ORM 'peewee': http://docs.peewee-orm.com/en/latest/index.html
+# postgreSQL database
 
 baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
 
 # log file
 logf = open("errors.log", "w")
+
+# select language: 1 = SLO, 2 = English, 3 = Deutsch, 4 = Italiano, 5 = Français, 6 = Pусский, 7 = Español
+lng = 1
+
+
+def connectDB():
+    db = PostgresqlDatabase(
+        'slovenia_db',
+        user='adminslo',
+        password='slo',
+        host='localhost',
+    )
+
+    return db
 
 
 class BaseModel(Model):
@@ -44,18 +60,6 @@ class Attraction(BaseModel):
     gpsX = DoubleField()
     gpsY = DoubleField()
     timestamp = DateTimeField(default=datetime.datetime.now)
-
-
-
-def connectDB():
-    db = PostgresqlDatabase(
-        'slovenia_db',
-        user='adminslo',
-        password='slo',
-        host='localhost',
-    )
-
-    return db
 
 
 
@@ -101,25 +105,28 @@ def getAttraction(link):
 def selectRegion():
 
     # Gorenjska, Goriška, Obalno - kraška, Osrednjeslovenska, Podravska, Notranjsko - kraška, Jugovzhodna Slovenija, Koroška, Savinjska, Pomurska, Spodnjeposavska, Zasavska
+    # without lng param in url, we add it later
 
     regions = [
-        'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1',
-        'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=1',
-        'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=1',
-        'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=1',
-        'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=1',
-        'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=1',
-        'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=1',
-        'http://www.slovenia.info/si/Regije/Koro%C5%A1ka.htm?_ctg_regije=121&lng=1',
-        'http://www.slovenia.info/si/Regije/Savinjska.htm?_ctg_regije=14&lng=1',
-        'http://www.slovenia.info/si/Regije/Pomurska.htm?_ctg_regije=16&lng=1',
-        'http://www.slovenia.info/si/Regije/Spodnjeposavska.htm?_ctg_regije=133&lng=1',
-        'http://www.slovenia.info/si/Regije/Zasavska.htm?_ctg_regije=12&lng=1'
+        'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=',
+        'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=',
+        'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=',
+        'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=',
+        'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=',
+        'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=',
+        'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=',
+        'http://www.slovenia.info/si/Regije/Koro%C5%A1ka.htm?_ctg_regije=121&lng=',
+        'http://www.slovenia.info/si/Regije/Savinjska.htm?_ctg_regije=14&lng=',
+        'http://www.slovenia.info/si/Regije/Pomurska.htm?_ctg_regije=16&lng=',
+        'http://www.slovenia.info/si/Regije/Spodnjeposavska.htm?_ctg_regije=133&lng=',
+        'http://www.slovenia.info/si/Regije/Zasavska.htm?_ctg_regije=12&lng='
     ]
 
     for region in regions:
         # wait 0.3 sec
         time.sleep(.300)
+        # adding lng param
+        region = region + str(lng)
         regionGetData(region)
 
     return
@@ -131,37 +138,41 @@ def regionGetData(regionUrl):
     # get data from individual region
     #print('region:', regionUrl)
 
-    page = requests.get(regionUrl)
-    elTree = etree.HTML(page.text)
+    try:
+        page = requests.get(regionUrl)
+        elTree = etree.HTML(page.text)
 
-    # name
-    name = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[2]/h1/text()')
-    print('region name:', name)
+        # name
+        name = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[2]/h1/text()')
+        print('region name:', name)
 
-    # description
-    description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
-    description = etree.tostring(description[0])
-    #print('data:', description)
+        # description
+        description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
+        description = etree.tostring(description[0])
+        #print('data:', description)
 
-    # picture link
-    pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
-    if len(pictureLink) > 0:
-        pictureLink = baseUrlPictures + pictureLink[0]
-    #print('link to picture:', pictureLink)
+        # picture link
+        pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
+        if len(pictureLink) > 0:
+            pictureLink = baseUrlPictures + pictureLink[0]
+        #print('link to picture:', pictureLink)
 
-    # attractions link
-    attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
-    if len(attrLinks) > 0:
-        attrLinks = baseUrl + attrLinks[0]
-    #print('attractions:', attrLinks)
-    #print('----------------------------------------\n')
+        # attractions link
+        attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
+        if len(attrLinks) > 0:
+            attrLinks = baseUrl + attrLinks[0]
+        #print('attractions:', attrLinks)
+        #print('----------------------------------------\n')
 
-    #saving to db
-    newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
-    newRegion.save()
+        #saving to db
+        newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
+        newRegion.save()
 
-    # let's get attractions from attraction link
-    regionGetAttractions(attrLinks, newRegion)
+        # let's get attractions from attraction link
+        regionGetAttractions(attrLinks, newRegion)
+
+    except Exception as e:
+        logf.write("Failed to get data from region " + regionUrl + ' : ' + str(e) + '\n')
 
     print('FINISHED WITH REGION', name, '\n---------------------------------------------\n')
 
@@ -412,36 +423,10 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 # starting
 db = connectDB()
 db.connect()
-
-
-#just for testing purposes
-attraction1 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Vintgar-Gorge-.htm?naravne_znamenitosti_jame=110&lng=1&redirected=1"
-attraction2 = "http://www.slovenia.info/en/naravne-znamenitosti-jame/Lake-Bohinj-.htm?naravne_znamenitosti_jame=1746&lng=1"
-attraction3 = "http://www.slovenia.info/si/arhitekturne-znamenitosti/Hi%C5%A1a-Percauz-.htm?arhitekturne_znamenitosti=705&lng=1"
-attraction4 = "http://www.slovenia.info/si/kul-zgod-znamenitosti/Napoleonov-drevored-lip-.htm?kul_zgod_znamenitosti=11879&lng=1"
-attraction5 = "http://www.slovenia.info/si/ponudniki-podezelje/Olive-in-olj%C4%8Dno-olje-na-Kmetiji-Bojanc-.htm?ponudniki_podezelje=438&lng=1"
-attraction6 = "http://www.slovenia.info/si/excursion-farm/Turisti%C4%8Dna-kmetija-Pri-Rjav%C4%8Devih-.htm?excursion_farm=739&lng=1"
-attraction7 = "http://www.slovenia.info/si/naravne-znamenitosti-jame/Izvir-kisle-vode-na-Jezerskem-.htm?naravne_znamenitosti_jame=169&lng=1"
-attraction8 = 'http://www.slovenia.info/si/Biseri-narave/Bohinjsko-jezero-.htm?naravne_znamenitosti_jame=1745&lng=1'
-attr_error = 'http://booking.slovenia.info/slovenia/sl/accommodation/detail/STO/BEB93FCD-C176-4A89-847D-5CEAB7485BB7/Turisti%C4%8Dna_kmetija_Pri__Biscu?customHeader=true&customFooter=true&cutomID='
-
-#newRegion = Region(name='test', link='test', description='test', picture='test')
-#newRegion.save()
-
-#attractionGetData(attr_error, newRegion, 1, 2)
-#attractionGetData(attraction6, newRegion, 2, 2)
-#attractionGetData(attraction8)
-region1 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=13&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
-region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_ctg_regije=10&srch=1&srchtype=predef&searchmode=20&localmode=region&lng=1"
-#regionGetAttractions(region2)
-#regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')
-
-
 #initDB(db)
+
+# add attractions from all regions
 #selectRegion()
+
 db.close()
-
-
-
-
 

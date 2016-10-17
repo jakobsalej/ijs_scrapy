@@ -10,7 +10,7 @@ baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
 
 # log file
-logf = open("errors.log", "w")
+logf = open("errors2.log", "w")
 
 
 def connectDB():
@@ -54,6 +54,26 @@ class Attraction(BaseModel):
     gpsX = DoubleField()
     gpsY = DoubleField()
     timestamp = DateTimeField(default=datetime.datetime.now)
+
+
+def getRegion(name):
+    try:
+        region = Region.get(Region.name == name)
+        print('Getting region', region.name)
+        return region
+
+    except:
+        print('ERROR: No such entry found.')
+
+def getAttraction(link):
+    try:
+        attraction = Attraction.get(Attraction.link == link)
+        print('Getting attraction', attraction.name)
+        return attraction
+
+    except:
+        print('ERROR: No such entry found.')
+        return None
 
 
 
@@ -341,7 +361,6 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
         #print('------------------------------------------\n')
 
-        # TO-DO: save all this somehow, somewhere
         newAttr = Attraction(name = attractionName[0],
                              link = attractionUrl,
                              address = attractionAddress[0],
@@ -408,9 +427,8 @@ region2 = "http://www.slovenia.info/si/Regije/Atrakcije-/search-predefined.htm?_
 #regionGetData('http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=1')
 
 
-
 #initDB()
-selectRegion()
+#selectRegion()
 db.close()
 
 

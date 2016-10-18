@@ -425,7 +425,7 @@ db = connectDB()
 db.connect()
 #initDB(db)
 
-# add attractions from all regions
+# start with all regions
 #selectRegion()
 
 db.close()

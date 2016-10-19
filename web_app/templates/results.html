@@ -1,0 +1,14 @@
+<!doctype html>
+<title>Results</title>
+
+
+<body>
+    <p>Here are the results:</p>
+    <ul>
+      {% for result in results %}
+        <li>{{ result["name"] }}</li>
+      {% endfor %}
+    </ul>
+
+
+</body>

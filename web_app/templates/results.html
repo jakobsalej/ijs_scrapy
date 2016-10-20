@@ -5,8 +5,8 @@
 <body>
     <p>Here are the results:</p>
     <ul>
-      {% for result in results %}
-        <li>{{ result["name"] }}</li>
+      {% for key in results %}
+        <li><a href="/attractions/{{ key }}">{{ [results[key]['name'], results[key]['type'], results[key]['regionName']]|join(";  ") }}</a></li>
       {% endfor %}
     </ul>
 

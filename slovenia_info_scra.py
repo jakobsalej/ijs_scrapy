@@ -421,12 +421,12 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
 
 # starting
-db = connectDB()
-db.connect()
+#db = connectDB()
+#db.connect()
 #initDB(db)
 
 # start with all regions
 #selectRegion()
 
-db.close()
+#db.close()
 

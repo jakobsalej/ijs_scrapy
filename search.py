@@ -1,8 +1,9 @@
 import os
+import collections
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import QueryParser, MultifieldParser
-from slovenia_info_scra import connectDB, Attraction, Region
+from slovenia_info_scra import Attraction, Region
 
 
 # schema for attribute entries
@@ -36,9 +37,6 @@ def init():
     writer = index.writer()
 
     # fill index from DB
-    db = connectDB()
-    db.connect()
-
     for attraction in Attraction.select():
         print(attraction.name, attraction.gpsX, attraction.gpsY)
         writer.add_document(
@@ -74,19 +72,24 @@ def searchIndex(index, text):
 
     # search for a given string
     with index.searcher() as searcher:
+        # using MultifieldParser to search all relevant fields
         query = MultifieldParser(["name", "type", "regionName", "description"], index.schema).parse(text)
         results = searcher.search(query)
+        print('Number of hits:', len(results))
+
+        # saving hits to the ordered dict, so we can return it (look at this: http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception)
+        dict = collections.OrderedDict()
         for result in results:
             print(result)
+            dict[result['id']] = {'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'] }
 
-        res = results
+        return dict
 
-    return res
+
 
 
 # only run once, to build index
 #init()
-
 
 # testing search
 #index = open_dir("index")

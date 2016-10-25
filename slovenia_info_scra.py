@@ -441,18 +441,40 @@ def townGetData(townUrl, n, numLinks):
         tree = html.fromstring(page.content)
         elTree = etree.HTML(page.text)
 
-        # name of the attraction:
-        attractionName = tree.xpath('// *[ @ id = "tdMainCenter"] / div[3] / div[1] / div[4] / h1/text()')
-        if len(attractionName) == 0:
-            attractionName = ['']
+        # name of the town:
+        townName = tree.xpath('// *[ @ id = "tdMainCenter"] / div[3] / div[1] / div[4] / h1/text()')
+        if len(townName) == 0:
+            townName = ['']
 
-        print(attractionName[0], '(', n, '/', numLinks, ')')
+        print(townName[0], '(', n, '/', numLinks, ')')
 
-        # address:
-        attractionAddress = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propLocation"]/div[2]/text()')
-        if len(attractionAddress) == 0:
-            attractionAddress = ['']
-        print("address:", attractionAddress)
+        # "mainTownData box with info"
+        # population:
+        townPop = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item pop"]/div/text()')
+        if len(townPop) == 0:
+            townPop = ['']
+        print("population:", townPop)
+
+        # altitude:
+        townAlt = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item alt"]/div/text()')
+        if len(townAlt) == 0:
+            townAlt = ['']
+        print("altitude:", townAlt)
+
+        # position:
+        townPos = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item pos"]/text()')
+        if len(townPos) == 0:
+            townPos = ['']
+        print("position:", townPos)
+
+        # temperatures (summer avg, winter avg):
+        townTempSummer = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item tmpr"]/div[2]/span/text()')
+        if len(townAlt) == 0:
+            townAlt = ['']
+        print("summer temp:", townTempSummer)
 
         # phone:
         attractionPhone = tree.xpath(

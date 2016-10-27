@@ -3,7 +3,7 @@ import collections
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import QueryParser, MultifieldParser
-from slovenia_info_scra import Attraction, Region
+from slovenia_info_scra import Attraction, Region, Town
 
 
 # schema for attribute entries
@@ -23,6 +23,7 @@ attrSchema = Schema(id=ID(stored=True),
                     place=TEXT,
                     gpsX=NUMERIC,
                     gpsY=NUMERIC,
+                    topResult=BOOLEAN
                     )
 
 
@@ -56,6 +57,26 @@ def init():
             gpsX=attraction.gpsX,
             gpsY=attraction.gpsY
         )
+
+    for town in Town.select():
+        print(town.name, town.gpsX, town.gpsY)
+        writer.add_document(
+            id=str(town.id).encode("utf-8").decode("utf-8"),
+            name=town.name,
+            link=town.link,
+            webpage=town.webpage,
+            tags=town.tags,
+            type=town.type,
+            description=town.description,
+            picture=town.picture,
+            regionName=town.regionName,
+            destination=town.destination,
+            place=town.place,
+            gpsX=town.gpsX,
+            gpsY=town.gpsY,
+            topResult=town.topResult
+        )
+        
     writer.commit()
 
 
@@ -92,9 +113,9 @@ def searchIndex(index, text):
 #init()
 
 # testing search
-#index = open_dir("index")
-#testSearch(index)
-#results = searchIndex(index, 'bled')
+index = open_dir("index")
+testSearch(index)
+results = searchIndex(index, 'bled')
 
 
 

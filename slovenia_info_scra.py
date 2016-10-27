@@ -401,7 +401,6 @@ def townGetData(townUrl, n, numLinks):
     global topResults
 
     # get data from individual town
-    print('link:', townUrl)
 
     try:
         page = requests.get(townUrl)
@@ -414,28 +413,29 @@ def townGetData(townUrl, n, numLinks):
             townName = ['']
 
         print(townName[0], '(', n, '/', numLinks, ')')
+        #print('link:', townUrl)
 
         # web page of the town (from the first information centre info)
         townWebPage = tree.xpath('//div[@class="ticItems"]/div[@class="item"]/div[@class="w"]/a/@href')
         if len(townWebPage) == 0:
             townWebPage = ['']
-        print('spletna stran:', townWebPage[0])
+        #print('spletna stran:', townWebPage[0])
 
         # "mainTownData box with info"
         # population:
         townPop = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item pop"]/div/text()')
         if len(townPop) == 0:
-            townPop = ['']
+            townPop = -1
         else:
             townPop = int(townPop[0])
-        print("population:", townPop)
+        #print("population:", townPop)
 
         # altitude:
         townAlt = tree.xpath(
             '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item alt"]/div/text()')
         if len(townAlt) == 0:
             townAlt = ['']
-        print("altitude:", townAlt)
+        #print("altitude:", townAlt)
 
         # position (more than one is possible, gotta join it):
         townPos = tree.xpath(
@@ -444,44 +444,28 @@ def townGetData(townUrl, n, numLinks):
             townPos = ['']
         else:
             townPos = [','.join(townPos)]
-        print("position:", townPos)
+        #print("position:", townPos)
 
         # temperatures (summer avg, winter avg):
-        townTempSummer = tree.xpath(
-            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item tmpr"]/div[2]/span/text()')
-        if len(townTempSummer) == 0:
-            townTempSummer = ['']
-        print("summer temp:", townTempSummer)
-
-        townTempWinter = tree.xpath(
-            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item tmpr"]/div[3]/span/text()')
-        if len(townTempWinter) == 0:
-            townTempWinter = ['']
-        print("winter temp:", townTempWinter)
+        townTemp = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item tmpr"]//span[@class="N3"]/text()')
+        if len(townTemp) == 0:
+            townTemp = ['', '']
+        #print("summer temp:", townTemp)
 
         # number of sunny / rainy days per year:
         townSunnyDays = tree.xpath(
-            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item sun"]/div[1]/span/text()')
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item sun"]//span[@class="N3"]/text()')
         if len(townSunnyDays) == 0:
-            townSunnyDays = -1
-        else:
-            townSunnyDays = int(townSunnyDays[0])
-        print("number of sunny days:", townSunnyDays)
-
-        townRainyDays = tree.xpath(
-            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item sun"]/div[2]/span/text()')
-        if len(townRainyDays) == 0:
-            townRainyDays = -1
-        else:
-            townRainyDays = int(townRainyDays[0])
-        print("number of rainy days:", townRainyDays)
+            townSunnyDays = ['-1', '-1']
+        #print("number of sunny/rainy days:", townSunnyDays)
 
         # webpage path to town, we remove the first one as its always "Domov" and save the one before last as it tells as type of town
         townNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
         townType = townNavPath[len(townNavPath)-2]
         townNavPath.pop(0)
         townNavPath = ','.join(townNavPath)
-        print("navigation path:", townNavPath)
+        #print("navigation path:", townNavPath)
 
         # description:
         townDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
@@ -502,13 +486,13 @@ def townGetData(townUrl, n, numLinks):
         townDescriptionFixed = fixLinks(townDescription[0])
 
         content = etree.tostring(townDescriptionFixed)
-        print("description:", content)
+        #print("description:", content)
 
         # main picture: (we have to merge it with base url for full picture url)
         townPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
         if len(townPictureMain) > 0 and not 'www' in townPictureMain[0]:
             townPictureMain = baseUrlPictures + townPictureMain[0]
-        print("link to main picture:", townPictureMain)
+        #print("link to main picture:", townPictureMain)
 
         # region
         townRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
@@ -516,7 +500,7 @@ def townGetData(townUrl, n, numLinks):
             townRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
             if len(townRegion) == 0:
                 townRegion = ['']
-        print("region:", townRegion)
+        #print("region:", townRegion)
 
         # destination
         townDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
@@ -524,7 +508,7 @@ def townGetData(townUrl, n, numLinks):
             townDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
             if len(townDestination) == 0:
                 townDestination = ['']
-        print("destination:", townDestination)
+        #print("destination:", townDestination)
 
         # place
         townPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
@@ -532,7 +516,7 @@ def townGetData(townUrl, n, numLinks):
             townPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
             if len(townPlace) == 0:
                 townPlace = ['']
-        print("place:", townPlace)
+        #print("place:", townPlace)
 
         # GPS coordinates
         townGPS = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row gps"]/a/text()')
@@ -543,13 +527,12 @@ def townGetData(townUrl, n, numLinks):
             gpsX = -1
             gpsY = -1
 
-        print("gps [x, y]:", townGPS)
+        #print("gps [x, y]:", townGPS)
 
         # getting region from DB for foreign key (TO-DO: optimize this?)
         region = getRegion(townRegion[0])
 
         # check if it's top result with array we saved in the beginning (by comparing the part of urls, after the last '/' - we cannot commpare full urls, they are different)
-        print('ST:', len(topResults))
         isTopResult = False
         for link in topResults:
             linkID = link.split('/')[-1]
@@ -558,8 +541,8 @@ def townGetData(townUrl, n, numLinks):
                 isTopResult = True
                 break
 
-        print('Top result:', isTopResult)
-        print('------------------------------------------\n')
+        #print('Top result:', isTopResult)
+        #print('------------------------------------------\n')
 
 
         # saving to DB
@@ -569,10 +552,10 @@ def townGetData(townUrl, n, numLinks):
                              population = townPop,
                              altitude = townAlt[0],
                              position = townPos[0],
-                             tempSummer = townTempSummer[0],
-                             tempWinter = townTempWinter[0],
-                             sunnyDays = townSunnyDays,
-                             rainyDays = townRainyDays,
+                             tempSummer = townTemp[0],
+                             tempWinter = townTemp[1],
+                             sunnyDays = int(townSunnyDays[0]),
+                             rainyDays = int(townSunnyDays[0]),
                              tags = townNavPath,
                              type = townType,
                              description = content,
@@ -614,6 +597,7 @@ def fixLinks(content):
     return content
 
 
+
 def join(url):
 
     # join relative URL with base URL
@@ -642,11 +626,6 @@ db.connect()
 
 # start with all regions, then  add towns
 #selectRegion()
-addTowns()
+#addTowns()
 
 db.close()
-
-city1 = 'http://www.slovenia.info/si/-ctg-kraji/Bohinj.htm?_ctg_kraji=2505&lng=1'
-city2 = 'http://www.slovenia.info/si/-ctg-kraji/Portoro%C5%BE.htm?_ctg_kraji=2653&lng=1'
-#townGetData(city1, 1, 2)
-#townGetData(city2, 2, 2)

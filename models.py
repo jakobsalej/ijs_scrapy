@@ -14,6 +14,14 @@ def connectDB():
     return db
 
 
+def initDB(db):
+
+    # create tables
+    db.create_tables([Region, Attraction, Town])
+
+    return
+
+
 class BaseModel(Model):
     class Meta:
         database = connectDB()

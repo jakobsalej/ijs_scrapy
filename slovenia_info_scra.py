@@ -1,8 +1,7 @@
 from lxml import html, etree
 import requests
 import time
-import datetime
-from peewee import *
+from models import *
 
 
 # getting data from webpage www.slovenia.info using lxml and Xpath
@@ -11,65 +10,15 @@ from peewee import *
 
 baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
+topResults = []
 
 # log files
+regionLog = open('region_errors.log', 'w')
 attrLog = open('attr_errors.log', 'w')
 townLog = open('town_errors.log', 'w')
 
 # select language: 1 = SLO, 2 = English, 3 = Deutsch, 4 = Italiano, 5 = Français, 6 = Pусский, 7 = Español
 lng = 1
-
-
-def connectDB():
-    db = PostgresqlDatabase(
-        'slovenia_db',
-        user='adminslo',
-        password='slo',
-        host='localhost',
-    )
-
-    return db
-
-
-class BaseModel(Model):
-    class Meta:
-        database = connectDB()
-
-
-class Region(BaseModel):
-    name = CharField()
-    link = CharField()
-    description = TextField()
-    picture = CharField()
-    timestamp = DateTimeField(default=datetime.datetime.now)
-
-
-class Attraction(BaseModel):
-    name = CharField()
-    link = CharField()
-    address = CharField()
-    phone = CharField()
-    webpage = CharField()
-    tags = CharField()
-    type = CharField()
-    description = TextField()
-    picture = CharField()
-    regionName = CharField()
-    region = ForeignKeyField(Region, related_name='attractions')
-    destination = CharField()
-    place = CharField()
-    gpsX = DoubleField()
-    gpsY = DoubleField()
-    timestamp = DateTimeField(default=datetime.datetime.now)
-
-
-
-def initDB(db):
-
-    # create tables
-    db.create_tables([Region, Attraction])
-
-    return
 
 
 
@@ -79,7 +28,7 @@ def getRegion(name):
 
     try:
         region = Region.get(Region.name == name)
-        print('Getting region', region.name)
+        #print('Getting region', region.name)
         return region
 
     except:
@@ -102,12 +51,14 @@ def getAttraction(link):
         return None
 
 
-def getTowns():
+
+def addTowns():
 
     # one page that contains links of all the cities and places
     # added lng param so we can simply choose lng
     towns = 'http://www.slovenia.info/si/Mesta-in-kraji.htm?_ctg_kraji=0&lng=' + str(lng)
     pageGetLinks(towns, None)
+
 
 
 def selectRegion():
@@ -156,7 +107,11 @@ def regionGetData(regionUrl):
 
         # description
         description = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
-        description = etree.tostring(description[0])
+
+        # find all relative links in description and replace them with absolute ones
+        descriptionFixed = fixLinks(description[0])
+
+        description = etree.tostring(descriptionFixed)
         #print('data:', description)
 
         # picture link
@@ -180,7 +135,7 @@ def regionGetData(regionUrl):
         pageGetLinks(attrLinks, newRegion)
 
     except Exception as e:
-        logf.write("Failed to get data from region " + regionUrl + ' : ' + str(e) + '\n')
+        regionLog.write("ERROR: " + regionUrl + ' : ' + str(e) + '\n')
 
     print('FINISHED WITH REGION', name, '\n---------------------------------------------\n')
 
@@ -204,19 +159,26 @@ def pageGetLinks(pageUrl, regionObject):
     n = 1
     for node in attrGroups:
         #print(n, ":", node.tag, node.attrib['id'])
-        attrLinksList = attractionGroup(node)
-        print('Starting with group', n, '- number of attractions:', len(attrLinksList))
+        attrLinksList = attractionGroup(node, n)
+        print('Starting with group', n, '- number of items:', len(attrLinksList))
         pageAllLinks(attrLinksList, regionObject)
-        print('Finished with group', n, '\n------------------------\n')
+        print('Finished with group', n, '\n---------------------------------------------------------\n')
         n += 1
 
     return
 
 
 
-def attractionGroup(group):
+def attractionGroup(group, n):
+    global topResults
 
     # get all attraction links for specific group (lakes, rivers,...)
+
+    # save links of the top results (n = 1, group 1 is top results) to array, so we can access it later; TO-DO: works even for attractions (lepote)?
+    if n == 1:
+        topResults = group.xpath('//div[@class="info"]/a[1]/@href')
+        #print('adding TOP link:', topResults)
+        #print('No:', len(topResults))
 
     # first we get all the attraction links from page one (default)
     attrLinksList = []
@@ -224,19 +186,19 @@ def attractionGroup(group):
     # we only need the second link, first one is location of attraction (a[2])
     for link in group.iterfind('div[@class="box2"]/p/a[2]'):
         attrLinksList.append(link.attrib['href'])
-        print('adding link:', link.attrib['href'])
+        #print('adding link:', link.attrib['href'])
 
     #print("Number of links in group:", len(attrLinksList))
 
     # we need selected div's ID because once we load a new link (page two, for example), we have to know which group are we looking at (all the links from other groups are still visible, just collapsed)
     groupId = group.attrib['id']
-    print('ID:', groupId)
+    #print('ID:', groupId)
 
     # we look for the links of pages (if there are more than 50 attractions in a group, they are paginated)
     # we don't need to 'click' on the first link (we already have those attractions, they are shown by default)
     count = 0
     for pageLinks in group.iterfind('div[@class="subbox"]/div[@class="paging"]/div[@class="links"]/a'):
-        print("Page link found:", pageLinks.tag, pageLinks.attrib['href'])
+        #print("Page link found:", pageLinks.tag, pageLinks.attrib['href'])
 
         if count != 0:
             # wait 0.3 sec
@@ -245,7 +207,7 @@ def attractionGroup(group):
             # adding links from page 2, 3, .. of selected group
             attractionsPage = attrGroupSubPage(pageLinks.attrib['href'], groupId)
             attrLinksList.extend(attractionsPage)
-            print('number of attractions in group:', len(attrLinksList))
+            #print('number of attractions in group:', len(attrLinksList))
 
         count += 1
 
@@ -258,18 +220,18 @@ def attrGroupSubPage(link, id):
     # find the correct div based on given id, extract links and return them
 
     fullLink = baseUrl + link
-    print("going to page:", fullLink)
+    #print("going to page:", fullLink)
 
     page = requests.get(fullLink)
     tree = html.fromstring(page.content)
 
     # search string
     searchStr = '//div[@id="' + id + '"]//p/a[2]/@href'
-    print(searchStr)
+    #print(searchStr)
 
     linksPageAttractions = tree.xpath(searchStr)
-    print('new links:', linksPageAttractions)
-    print('number of new links:', len(linksPageAttractions))
+    #print('new links:', linksPageAttractions)
+    #print('number of new links:', len(linksPageAttractions))
 
     return linksPageAttractions
 
@@ -284,7 +246,7 @@ def pageAllLinks(links, regionObject):
         fullLink = baseUrl + link
         time.sleep(.300)
 
-        # use regionObject as an indentifier between attraction/town type (town has regionObject 'None')
+        # use regionObject as an identifier between attraction/town type (town has regionObject 'None', all attractions have valid regionObject (not None))
         if regionObject == None:
             townGetData(fullLink, n, len(links))
         else:
@@ -358,7 +320,10 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
         # childLink = attractionDescription[0].find('a')
         # print('Removing:', etree.tostring(childLink))
         # attractionDescription[0].remove(childLink)
-        content = etree.tostring(attractionDescription[0])
+
+        # find all relative links in description and replace them with absolute ones
+        attractionDescriptionFixed = fixLinks(attractionDescription[0])
+        content = etree.tostring(attractionDescriptionFixed)
         #print("description:", content)
 
         # main picture: (we have to merge it with base url for full picture url)
@@ -425,6 +390,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
         newAttr.save()
 
     except Exception as e:
+        print('EXCEPTION: ', str(e))
         attrLog.write("ERROR: " + attractionUrl + ' : ' + str(e) + '\n')
 
     return
@@ -432,8 +398,9 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
 
 def townGetData(townUrl, n, numLinks):
+    global topResults
 
-    # get data from individual attraction
+    # get data from individual town
     print('link:', townUrl)
 
     try:
@@ -448,11 +415,19 @@ def townGetData(townUrl, n, numLinks):
 
         print(townName[0], '(', n, '/', numLinks, ')')
 
+        # web page of the town (from the first information centre info)
+        townWebPage = tree.xpath('//div[@class="ticItems"]/div[@class="item"]/div[@class="w"]/a/@href')
+        if len(townWebPage) == 0:
+            townWebPage = ['']
+        print('spletna stran:', townWebPage[0])
+
         # "mainTownData box with info"
         # population:
         townPop = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item pop"]/div/text()')
         if len(townPop) == 0:
             townPop = ['']
+        else:
+            townPop = int(townPop[0])
         print("population:", townPop)
 
         # altitude:
@@ -462,144 +437,216 @@ def townGetData(townUrl, n, numLinks):
             townAlt = ['']
         print("altitude:", townAlt)
 
-        # position:
+        # position (more than one is possible, gotta join it):
         townPos = tree.xpath(
             '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item pos"]/text()')
         if len(townPos) == 0:
             townPos = ['']
+        else:
+            townPos = [','.join(townPos)]
         print("position:", townPos)
 
         # temperatures (summer avg, winter avg):
         townTempSummer = tree.xpath(
             '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item tmpr"]/div[2]/span/text()')
-        if len(townAlt) == 0:
-            townAlt = ['']
+        if len(townTempSummer) == 0:
+            townTempSummer = ['']
         print("summer temp:", townTempSummer)
 
-        # phone:
-        attractionPhone = tree.xpath(
-            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propPhone"]/div[2]/text()')
-        if len(attractionPhone) == 0:
-            attractionPhone = ['']
-        print("phone:", attractionPhone)
+        townTempWinter = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item tmpr"]/div[3]/span/text()')
+        if len(townTempWinter) == 0:
+            townTempWinter = ['']
+        print("winter temp:", townTempWinter)
 
-        # email does not work, problem with js (link is not visible to lxml?)
-        attractionEmail = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[2]/div[2]')
-        #if len(attractionEmail) > 0:
-            #print("email:", etree.tostring(attractionEmail[0]))
+        # number of sunny / rainy days per year:
+        townSunnyDays = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item sun"]/div[1]/span/text()')
+        if len(townSunnyDays) == 0:
+            townSunnyDays = -1
+        else:
+            townSunnyDays = int(townSunnyDays[0])
+        print("number of sunny days:", townSunnyDays)
 
-        # webpage:
-        attractionWebpage = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[1]/div[1]/div[@class="prop propRow propWWW"]/a/text()')
+        townRainyDays = tree.xpath(
+            '//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/div[1]/div[@class="mainTownData"]/div[@class="item sun"]/div[2]/span/text()')
+        if len(townRainyDays) == 0:
+            townRainyDays = -1
+        else:
+            townRainyDays = int(townRainyDays[0])
+        print("number of rainy days:", townRainyDays)
 
-        # in case link is split, we have to merge it
-        attractionWebpage = ''.join(attractionWebpage)
-        print("webpage:", attractionWebpage)
-
-        # webpage path to attraction, we remove the first one as its always "Domov" and save the one before last as it tells as type of attraction
-        attractionNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
-        attractionType = attractionNavPath[len(attractionNavPath)-2]
-        attractionNavPath.pop(0)
-        attractionNavPath = ','.join(attractionNavPath)
-        print("navigation path:", attractionNavPath)
+        # webpage path to town, we remove the first one as its always "Domov" and save the one before last as it tells as type of town
+        townNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
+        townType = townNavPath[len(townNavPath)-2]
+        townNavPath.pop(0)
+        townNavPath = ','.join(townNavPath)
+        print("navigation path:", townNavPath)
 
         # description:
-        attractionDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
-        #print("raw:,", etree.tostring(attractionDescription[0]))
+        townDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
+        #print("raw:,", etree.tostring(townDescription[0]))
 
         # we remove unecessary parts (we only need body text)
-        childDiv = attractionDescription[0].find('div')
+        childDiv = townDescription[0].find('div')
         #print('Odstranjujem:', etree.tostring(childDiv))
         if childDiv is not None:
-            attractionDescription[0].remove(childDiv)
+            townDescription[0].remove(childDiv)
 
         # if we try to remove picture link, we also remove text -> NOT OK! TO-DO: http://stackoverflow.com/questions/22967659/removing-an-element-but-not-the-text-after-it
-        # childLink = attractionDescription[0].find('a')
+        # childLink = townDescription[0].find('a')
         # print('Removing:', etree.tostring(childLink))
-        # attractionDescription[0].remove(childLink)
-        content = etree.tostring(attractionDescription[0])
+        # townDescription[0].remove(childLink)
+
+        # find all relative links in description and replace them with absolute ones
+        townDescriptionFixed = fixLinks(townDescription[0])
+
+        content = etree.tostring(townDescriptionFixed)
         print("description:", content)
 
         # main picture: (we have to merge it with base url for full picture url)
-        attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
-        if len(attractionPictureMain) > 0:
-            attractionPictureMain = baseUrlPictures + attractionPictureMain[0]
-        print("link to main picture:", attractionPictureMain)
+        townPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
+        if len(townPictureMain) > 0 and not 'www' in townPictureMain[0]:
+            townPictureMain = baseUrlPictures + townPictureMain[0]
+        print("link to main picture:", townPictureMain)
 
         # region
-        attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
-        if len(attractionRegion) < 1:
-            attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
-            if len(attractionRegion) == 0:
-                attractionRegion = ['']
-        print("region:", attractionRegion)
+        townRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/a/text()')
+        if len(townRegion) < 1:
+            townRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
+            if len(townRegion) == 0:
+                townRegion = ['']
+        print("region:", townRegion)
 
         # destination
-        attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
-        if len(attractionDestination) < 1:
-            attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
-            if len(attractionDestination) == 0:
-                attractionDestination = ['']
-        print("destination:", attractionDestination)
+        townDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
+        if len(townDestination) < 1:
+            townDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
+            if len(townDestination) == 0:
+                townDestination = ['']
+        print("destination:", townDestination)
 
         # place
-        attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
-        if len(attractionPlace) < 1:
-            attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
-            if len(attractionPlace) == 0:
-                attractionPlace = ['']
-        print("place:", attractionPlace)
+        townPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
+        if len(townPlace) < 1:
+            townPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
+            if len(townPlace) == 0:
+                townPlace = ['']
+        print("place:", townPlace)
 
         # GPS coordinates
-        attractionGPS = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row gps"]/a/text()')
-        if len(attractionGPS):
-            gpsX = float(attractionGPS[0].replace(',', '.'))
-            gpsY = float(attractionGPS[1].replace(',', '.'))
+        townGPS = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row gps"]/a/text()')
+        if len(townGPS):
+            gpsX = float(townGPS[0].replace(',', '.'))
+            gpsY = float(townGPS[1].replace(',', '.'))
         else:
             gpsX = -1
             gpsY = -1
 
-        print("gps [x, y]:", attractionGPS)
+        print("gps [x, y]:", townGPS)
 
+        # getting region from DB for foreign key (TO-DO: optimize this?)
+        region = getRegion(townRegion[0])
+
+        # check if it's top result with array we saved in the beginning (by comparing the part of urls, after the last '/' - we cannot commpare full urls, they are different)
+        print('ST:', len(topResults))
+        isTopResult = False
+        for link in topResults:
+            linkID = link.split('/')[-1]
+            townUrlID = townUrl.split('/')[-1]
+            if linkID == townUrlID:
+                isTopResult = True
+                break
+
+        print('Top result:', isTopResult)
         print('------------------------------------------\n')
 
+
         # saving to DB
-        newAttr = Attraction(name = attractionName[0],
+        newTown = Town(name = townName[0],
                              link = townUrl,
-                             address = attractionAddress[0],
-                             phone = attractionPhone[0],
-                             webpage = attractionWebpage,
-                             tags = attractionNavPath,
-                             type = attractionType,
+                             webpage = townWebPage[0],
+                             population = townPop,
+                             altitude = townAlt[0],
+                             position = townPos[0],
+                             tempSummer = townTempSummer[0],
+                             tempWinter = townTempWinter[0],
+                             sunnyDays = townSunnyDays,
+                             rainyDays = townRainyDays,
+                             tags = townNavPath,
+                             type = townType,
                              description = content,
-                             picture = attractionPictureMain,
-                             regionName = attractionRegion[0],
-                             region = None,     # TO-DO: get appropriate region from db
-                             destination = attractionDestination[0],
-                             place = attractionPlace[0],
+                             picture = townPictureMain,
+                             regionName = townRegion[0],
+                             region = region,
+                             destination = townDestination[0],
+                             place = townPlace[0],
                              gpsX = gpsX,
-                             gpsY = gpsY
+                             gpsY = gpsY,
+                             topResult = isTopResult
                              )
 
-        #newAttr.save()
+        newTown.save()
 
     except Exception as e:
+        print('EXCEPTION:', str(e))
         townLog.write("ERROR: " + townUrl + ' : ' + str(e) + '\n')
 
     return
 
 
 
+def fixLinks(content):
+
+    # find all links and picture links in description and change them from relative to absolute
+    # solution from here: http://stackoverflow.com/questions/26167690/lxml-how-to-change-img-src-to-absolute-link
+
+    for node in content.xpath('//*[@src]'):
+        url = node.get('src')
+        url = join(url)
+        node.set('src', url)
+
+    for node in content.xpath('//*[@href]'):
+        href = node.get('href')
+        url = join(href)
+        node.set('href', url)
+
+    return content
+
+
+def join(url):
+
+    # join relative URL with base URL
+
+    if url.startswith("/") and not ("://" in url):
+        # if it starts with /
+        #print('Fixing:', (baseUrl+url))
+        return baseUrl + url
+    elif not ("://" in url or url.startswith("www")):
+        # if it doesn't start with /
+        #print('Fixing:', (baseUrlPictures + url))
+        return baseUrlPictures + url
+    elif url.startswith("www"):
+        return 'http://' + url
+    else:
+        # already absolute
+        return url
+
+
+
 
 # starting
-#db = connectDB()
-#db.connect()
+db = connectDB()
+db.connect()
 #initDB(db)
 
-# start with all regions
+# start with all regions, then  add towns
 #selectRegion()
+addTowns()
 
-#db.close()
+db.close()
 
-city1 = 'http://www.slovenia.info/si/-ctg-kraji/Piran-Pirano.htm?_ctg_kraji=2649&lng=1'
-townGetData(city1, 1, 1)
-#getTowns()
+city1 = 'http://www.slovenia.info/si/-ctg-kraji/Bohinj.htm?_ctg_kraji=2505&lng=1'
+city2 = 'http://www.slovenia.info/si/-ctg-kraji/Portoro%C5%BE.htm?_ctg_kraji=2653&lng=1'
+#townGetData(city1, 1, 2)
+#townGetData(city2, 2, 2)

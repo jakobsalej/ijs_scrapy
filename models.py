@@ -35,6 +35,7 @@ class Region(BaseModel):
     timestamp = DateTimeField(default=datetime.datetime.now)
 
 
+
 class Attraction(BaseModel):
     name = CharField()
     link = CharField()

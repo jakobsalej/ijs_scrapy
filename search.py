@@ -23,7 +23,8 @@ attrSchema = Schema(id=ID(stored=True),
                     place=TEXT,
                     gpsX=NUMERIC,
                     gpsY=NUMERIC,
-                    topResult=BOOLEAN
+                    topResult=BOOLEAN,
+                    typeID=TEXT(stored=True)
                     )
 
 
@@ -37,7 +38,7 @@ def init():
 
     writer = index.writer()
 
-    # fill index from DB
+    # fill index from DB with regions, attractions and towns
     for attraction in Attraction.select():
         print(attraction.name, attraction.gpsX, attraction.gpsY)
         writer.add_document(
@@ -55,7 +56,8 @@ def init():
             destination=attraction.destination,
             place=attraction.place,
             gpsX=attraction.gpsX,
-            gpsY=attraction.gpsY
+            gpsY=attraction.gpsY,
+            typeID='attraction'
         )
 
     for town in Town.select():
@@ -74,7 +76,21 @@ def init():
             place=town.place,
             gpsX=town.gpsX,
             gpsY=town.gpsY,
-            topResult=town.topResult
+            topResult=town.topResult,
+            typeID='town'
+        )
+
+    for region in Region.select():
+        print(region.name)
+        writer.add_document(
+            id=str(region.id).encode("utf-8").decode("utf-8"),
+            name=region.name,
+            link=region.link,
+            description=region.description,
+            picture=region.picture,
+            regionName='region',    # just for displaying results, doesn't matter
+            type='region',
+            typeID='region'
         )
         
     writer.commit()
@@ -102,7 +118,7 @@ def searchIndex(index, text):
         dict = collections.OrderedDict()
         for result in results:
             print(result)
-            dict[result['id']] = {'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'] }
+            dict[result['id']] = {'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'typeID': result['typeID'] }
 
         return dict
 

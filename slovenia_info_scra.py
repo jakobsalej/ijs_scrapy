@@ -4,6 +4,7 @@ import time
 from models import *
 
 
+
 # getting data from webpage www.slovenia.info using lxml and Xpath
 # using ORM 'peewee': http://docs.peewee-orm.com/en/latest/index.html
 # postgreSQL database
@@ -629,3 +630,6 @@ db.connect()
 #addTowns()
 
 db.close()
+
+
+town1 = 'http://www.slovenia.info/si/Mesta-in-kraji-v-Sloveniji/Ljubljana.htm?_ctg_kraji=2609&lng=1'       # CHECK DESCRIPTION!!

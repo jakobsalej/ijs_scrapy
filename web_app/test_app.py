@@ -3,7 +3,7 @@ sys.path.append('../')
 
 from flask import Flask, render_template, request
 from search import searchIndex
-from slovenia_info_scra import Attraction
+from models import *
 from whoosh.index import open_dir
 
 app = Flask(__name__)
@@ -26,12 +26,19 @@ def search():
     return render_template('results.html', results=dict)
 
 
-@app.route('/attractions/<id>')
-def attraction(id=None):
+@app.route('/<type>/<id>')
+def attraction(type=None, id=None):
 
-    # getting attraction from DB based on ID in url
+    # getting attraction from DB based on ID and type in url
     id = float(id)
-    attr = Attraction.get(Attraction.id == id)
-    print(attr.name)
 
-    return render_template('attraction.html', attr=attr)
+    if type == 'region':
+        item = Region.get(Region.id == id)
+    elif type == 'town':
+        item = Town.get(Town.id == id)
+    elif type == 'attraction':
+        item = Attraction.get(Attraction.id == id)
+
+    print(item.name)
+
+    return render_template('attraction.html', item=item)

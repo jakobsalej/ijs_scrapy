@@ -12,6 +12,7 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
+
 @app.route('/search', methods=['POST', 'GET'])
 def search():
     if request.method == 'POST':
@@ -21,7 +22,6 @@ def search():
         # set a path to correct 'index' dir
         index = open_dir("../index")
         dict = searchIndex(index, text)
-
 
     return render_template('results.html', results=dict)
 

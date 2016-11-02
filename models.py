@@ -52,6 +52,7 @@ class Attraction(BaseModel):
     place = CharField()
     gpsX = DoubleField()
     gpsY = DoubleField()
+    topResult = BooleanField()
     timestamp = DateTimeField(default=datetime.datetime.now)
 
 

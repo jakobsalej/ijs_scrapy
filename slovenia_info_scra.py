@@ -13,13 +13,24 @@ baseUrl = "http://www.slovenia.info"
 baseUrlPictures = "http://www.slovenia.info/"
 topResults = []
 
-# log files
-regionLog = open('region_errors.log', 'w')
-attrLog = open('attr_errors.log', 'w')
-townLog = open('town_errors.log', 'w')
+regionLog = None
+attrLog = None
+townLog = None
 
 # select language: 1 = SLO, 2 = English, 3 = Deutsch, 4 = Italiano, 5 = Français, 6 = Pусский, 7 = Español
 lng = 1
+
+
+
+def prepareLogFiles():
+    global regionLog, attrLog, townLog
+
+    # log files
+    regionLog = open('region_errors.log', 'w')
+    attrLog = open('attr_errors.log', 'w')
+    townLog = open('town_errors.log', 'w')
+
+    return
 
 
 
@@ -68,13 +79,13 @@ def selectRegion():
     # without lng param in url, we add it later
 
     regions = [
-        'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=',
-        'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=',
-        'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=',
-        'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=',
-        'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=',
-        'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=',
-        'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=',
+        #'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=',
+        #'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=',
+        #'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=',
+        #'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=',
+        #'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=',
+        #'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=',
+        #'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=',
         'http://www.slovenia.info/si/Regije/Koro%C5%A1ka.htm?_ctg_regije=121&lng=',
         'http://www.slovenia.info/si/Regije/Savinjska.htm?_ctg_regije=14&lng=',
         'http://www.slovenia.info/si/Regije/Pomurska.htm?_ctg_regije=16&lng=',
@@ -124,7 +135,7 @@ def regionGetData(regionUrl):
         # attractions link
         attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
         if len(attrLinks) > 0:
-            attrLinks = baseUrl + attrLinks[0]
+            attrLinks = attrLinks[0]
         #print('attractions:', attrLinks)
         #print('----------------------------------------\n')
 
@@ -136,6 +147,7 @@ def regionGetData(regionUrl):
         pageGetLinks(attrLinks, newRegion)
 
     except Exception as e:
+        print('ERROR:', e)
         regionLog.write("ERROR: " + regionUrl + ' : ' + str(e) + '\n')
 
     print('FINISHED WITH REGION', name, '\n---------------------------------------------\n')
@@ -175,7 +187,7 @@ def attractionGroup(group, n):
 
     # get all attraction links for specific group (lakes, rivers,...)
 
-    # save links of the top results (n = 1, group 1 is top results) to array, so we can access it later; TO-DO: works even for attractions (lepote)?
+    # save links of the top results (n = 1, group 1 is top results) to array, so we can access it later; TO-DO: works even for attractions ('lepote')?
     if n == 1:
         topResults = group.xpath('//div[@class="info"]/a[1]/@href')
         #print('adding TOP link:', topResults)
@@ -259,6 +271,7 @@ def pageAllLinks(links, regionObject):
 
 
 def attractionGetData(attractionUrl, regionObject, n, numLinks):
+    global topResults
 
     # get data from individual attraction
     # print('link:', attractionUrl)
@@ -368,6 +381,17 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
         #print("gps [x, y]:", attractionGPS)
 
+        # check if it's top result with array we saved in the beginning (by comparing the part of urls, after the last '/' - we cannot commpare full urls, they are different)
+        isTopResult = False
+        for link in topResults:
+            linkID = link.split('/')[-1]
+            townUrlID = attractionUrl.split('/')[-1]
+            if linkID == townUrlID:
+                isTopResult = True
+                break
+
+        #print('Top result:', isTopResult)
+
         #print('------------------------------------------\n')
 
         # saving to DB
@@ -385,7 +409,8 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
                              destination = attractionDestination[0],
                              place = attractionPlace[0],
                              gpsX = gpsX,
-                             gpsY = gpsY
+                             gpsY = gpsY,
+                             topResult = isTopResult
                              )
 
         newAttr.save()
@@ -487,7 +512,7 @@ def townGetData(townUrl, n, numLinks):
         townDescriptionFixed = fixLinks(townDescription[0])
 
         content = etree.tostring(townDescriptionFixed)
-        #print("description:", content)
+        print("description:", content)
 
         # main picture: (we have to merge it with base url for full picture url)
         townPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
@@ -570,7 +595,7 @@ def townGetData(townUrl, n, numLinks):
                              topResult = isTopResult
                              )
 
-        newTown.save()
+        #newTown.save()
 
     except Exception as e:
         print('EXCEPTION:', str(e))
@@ -621,15 +646,17 @@ def join(url):
 
 
 # starting
+prepareLogFiles()
 db = connectDB()
 db.connect()
 #initDB(db)
 
 # start with all regions, then  add towns
-#selectRegion()
+selectRegion()
 #addTowns()
 
 db.close()
 
 
 town1 = 'http://www.slovenia.info/si/Mesta-in-kraji-v-Sloveniji/Ljubljana.htm?_ctg_kraji=2609&lng=1'       # CHECK DESCRIPTION!!
+#townGetData(town1, 1, 1)

@@ -79,13 +79,13 @@ def selectRegion():
     # without lng param in url, we add it later
 
     regions = [
-        #'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=',
-        #'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=',
-        #'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=',
-        #'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=',
-        #'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=',
-        #'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=',
-        #'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=',
+        'http://www.slovenia.info/si/Regije/Gorenjska.htm?_ctg_regije=10&lng=',
+        'http://www.slovenia.info/si/Regije/Gori%C5%A1ka-Smaragdna-pot.htm?_ctg_regije=9&lng=',
+        'http://www.slovenia.info/si/Regije/Obalno-kra%C5%A1ka.htm?_ctg_regije=17&lng=',
+        'http://www.slovenia.info/si/Regije/Osrednjeslovenska.htm?_ctg_regije=11&lng=',
+        'http://www.slovenia.info/si/Regije/Podravska.htm?_ctg_regije=15&lng=',
+        'http://www.slovenia.info/si/Regije/Notranjsko-kra%C5%A1ka.htm?_ctg_regije=134&lng=',
+        'http://www.slovenia.info/si/Regije/Jugovzhodna-Slovenija.htm?_ctg_regije=13&lng=',
         'http://www.slovenia.info/si/Regije/Koro%C5%A1ka.htm?_ctg_regije=121&lng=',
         'http://www.slovenia.info/si/Regije/Savinjska.htm?_ctg_regije=14&lng=',
         'http://www.slovenia.info/si/Regije/Pomurska.htm?_ctg_regije=16&lng=',
@@ -512,7 +512,7 @@ def townGetData(townUrl, n, numLinks):
         townDescriptionFixed = fixLinks(townDescription[0])
 
         content = etree.tostring(townDescriptionFixed)
-        print("description:", content)
+        #print("description:", content)
 
         # main picture: (we have to merge it with base url for full picture url)
         townPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
@@ -595,7 +595,7 @@ def townGetData(townUrl, n, numLinks):
                              topResult = isTopResult
                              )
 
-        #newTown.save()
+        newTown.save()
 
     except Exception as e:
         print('EXCEPTION:', str(e))
@@ -646,17 +646,13 @@ def join(url):
 
 
 # starting
-prepareLogFiles()
+#prepareLogFiles()
 db = connectDB()
 db.connect()
 #initDB(db)
 
 # start with all regions, then  add towns
-selectRegion()
+#selectRegion()
 #addTowns()
 
 db.close()
-
-
-town1 = 'http://www.slovenia.info/si/Mesta-in-kraji-v-Sloveniji/Ljubljana.htm?_ctg_kraji=2609&lng=1'       # CHECK DESCRIPTION!!
-#townGetData(town1, 1, 1)

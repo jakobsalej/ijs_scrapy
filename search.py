@@ -8,7 +8,7 @@ from slovenia_info_scra import Attraction, Region, Town
 
 # schema for attribute entries
 attrSchema = Schema(id=ID(stored=True),
-                    name=TEXT(stored=True),
+                    name=TEXT(stored=True, field_boost=1.5),
                     link=ID(stored=True),
                     address=TEXT,
                     phone=KEYWORD(commas=True),
@@ -95,14 +95,8 @@ def init():
         
     writer.commit()
 
+    return
 
-def testSearch(index):
-    # test search
-    with index.searcher() as searcher:
-        query = QueryParser("name", index.schema).parse("bled")
-        results = searcher.search(query)
-        for result in results:
-            print(result)
 
 
 def searchIndex(index, text):
@@ -111,14 +105,16 @@ def searchIndex(index, text):
     with index.searcher() as searcher:
         # using MultifieldParser to search all relevant fields
         query = MultifieldParser(["name", "type", "regionName", "description"], index.schema).parse(text)
-        results = searcher.search(query)
+        results = searcher.search(query, limit=50, terms=True)
         print('Number of hits:', len(results))
+
 
         # saving hits to the ordered dict, so we can return it (look at this: http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception)
         dict = collections.OrderedDict()
-        for result in results:
-            print(result)
-            dict[result['id']] = {'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'typeID': result['typeID'] }
+
+        for i, result in enumerate(results):
+            print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
+            dict[result['id']] = {'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'typeID': result['typeID'], 'score': results.score(i) }
 
         return dict
 
@@ -130,9 +126,4 @@ def searchIndex(index, text):
 
 # testing search
 index = open_dir("index")
-testSearch(index)
 results = searchIndex(index, 'bled')
-
-
-
-# TO-DO: add region entries (new index, add to this index?)

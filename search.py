@@ -15,7 +15,7 @@ attrSchema = Schema(id=ID(stored=True),
                     webpage=ID,
                     tags=KEYWORD(commas=True, scorable=True, lowercase=True),
                     type=ID(stored=True),
-                    description=TEXT,
+                    description=TEXT(field_boost=0.5),
                     picture=ID,
                     regionName=TEXT(stored=True),
                     regionID=ID,
@@ -114,7 +114,7 @@ def searchIndex(index, text):
 
         for i, result in enumerate(results):
             print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
-            dict[result['id']] = {'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'typeID': result['typeID'], 'score': results.score(i) }
+            dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'typeID': result['typeID'], 'score': results.score(i) }
 
         return dict
 
@@ -125,5 +125,7 @@ def searchIndex(index, text):
 #init()
 
 # testing search
-index = open_dir("index")
-results = searchIndex(index, 'bled')
+#index = open_dir("index")
+#results = searchIndex(index, 'gorenjska')
+
+# TO-DO: check search query for special words ("seznam,..") and return list of hits (first 10 for example); "seznam jezer na gorenjskem"

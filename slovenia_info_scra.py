@@ -26,9 +26,9 @@ def prepareLogFiles():
     global regionLog, attrLog, townLog
 
     # log files
-    regionLog = open('region_errors.log', 'w')
-    attrLog = open('attr_errors.log', 'w')
-    townLog = open('town_errors.log', 'w')
+    regionLog = open('log_files/region_errors.log', 'w')
+    attrLog = open('log_files/attr_errors.log', 'w')
+    townLog = open('log_files/town_errors.log', 'w')
 
     return
 

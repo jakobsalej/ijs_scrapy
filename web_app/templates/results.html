@@ -6,7 +6,7 @@
     <p>Here are the results:</p>
     <ul>
       {% for key in results %}
-        <li><a href="/{{ results[key]['typeID'] }}/{{ key }}">{{ [results[key]['name'], results[key]['type'], results[key]['regionName'], results[key]['score']]|join(";  ") }}</a></li>
+        <li><a href="/{{ results[key]['typeID'] }}/{{ results[key]['id'] }}">{{ [results[key]['name'], results[key]['type'], results[key]['regionName'], results[key]['score']]|join(";  ") }}</a></li>
       {% endfor %}
     </ul>
 

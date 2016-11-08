@@ -4,7 +4,6 @@ from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import MultifieldParser, OrGroup
 from whoosh.analysis import *
-from whoosh.lang.morph_en import variations
 from slovenia_info_scra import Attraction, Region, Town
 
 
@@ -13,6 +12,7 @@ specialWords = ['seznam', 'tabela',     # SLO
                 'list',                 # ENG
                 ]
 
+prepositions = ['na', 'v', 'ob', 's', 'z']
 
 
 # schema for attribute entries
@@ -22,9 +22,9 @@ attrSchema = Schema(id=ID(stored=True),
                     address=TEXT,
                     phone=KEYWORD(commas=True),
                     webpage=ID,
-                    tags=KEYWORD(commas=True, scorable=True, lowercase=True),
-                    type=ID(stored=True),
-                    description=TEXT(field_boost=0.25),
+                    tags=KEYWORD(commas=True, scorable=True, lowercase=True, field_boost=1.5),
+                    type=ID(stored=True, field_boost=1),
+                    description=TEXT(field_boost=0.01),
                     picture=ID,
                     regionName=TEXT(stored=True),
                     regionID=ID,
@@ -111,14 +111,14 @@ def init():
 def searchIndex(index, text):
 
     # look at the query for special words
-    newText, resultLimit = analyzeQuery(text)
+    newText, resultLimit = analyzeQuery(index, text)
 
     # search for a given string
     with index.searcher() as searcher:
         # using MultifieldParser to search all relevant fields
 
         # in case of multiple words in query, use OR (query: 'lake bled' => 'lake' OR 'bled'), but boost score of items that contain both tokens
-        orGroup = OrGroup.factory(0.8)
+        orGroup = OrGroup.factory(1.5)
         query = MultifieldParser(["name", "type", "regionName", "description", "tags", "topResult"], index.schema, group=orGroup).parse(newText)
         results = searcher.search(query, limit=resultLimit, terms=True)
         print('Number of hits:', len(results))
@@ -135,7 +135,7 @@ def searchIndex(index, text):
 
 
 
-def analyzeQuery(query):
+def analyzeQuery(index, query):
 
     # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
     sa = StandardAnalyzer(stoplist=specialWords)
@@ -150,11 +150,14 @@ def analyzeQuery(query):
         else:
             newQuery.append(token.text)
 
-    # turn list to string and pass it to search
-    index = open_dir("index")
-    wordCorrector(index, newQuery)
-
+    # turn list back to string
     text = ' '.join(newQuery)
+
+    # if limit = 10, we want to make search a bit more general, since we need more results based on type, not name (probably)
+    if limit == 10:
+        text = wordCorrector(index, text)
+
+
     print('New user query after analysis:', text)
 
     return text, limit
@@ -162,11 +165,33 @@ def analyzeQuery(query):
 
 
 def wordCorrector(index, text):
+
+    # look for any prepositions and remove them (as stopwords)
+    sa = StandardAnalyzer(stoplist=prepositions)
+    analyzedText = []
+    for token in sa(text, removestops=True):
+        analyzedText.append(token.text)
+
+    # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
     with index.searcher() as s:
-        corrector = s.corrector('regionName')
-        corrector2 = s.corrector('name')    # probably better to create a custom word list that has words in singular: jezero, reka, itd..
-        for word in text:
-            print(word, ', suggestions1:', corrector.suggest(word, limit=3), ', suggestions2:', corrector2.suggest(word, limit=3))
+        corrector1 = s.corrector('regionName')
+        corrector2 = s.corrector('tags')    # might be better to create a custom word list that has words in singular: jezero, reka, itd..??
+        for i, word in enumerate(analyzedText):
+            corrected1 = corrector1.suggest(word, limit=1)
+            corrected2 = corrector2.suggest(word, limit=1)
+            print(word, ', suggestions1:', corrected1, ', suggestions2:', corrector2.suggest(word, limit=1))
+            if len(corrected1) > 0:
+                analyzedText[i] = corrected1[0]
+            elif len(corrected2) > 0:
+                analyzedText[i] = corrected2[0]
+
+        # turn list back to string
+        text = ' '.join(analyzedText)
+        print('Corrected text:', text)
+
+        # TO-DO: filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
+
+        return text
 
 
 
@@ -176,15 +201,15 @@ def wordCorrector(index, text):
 
 # testing search
 index = open_dir("index")
-results = searchIndex(index, 'blejsko jezero')
+results = searchIndex(index, 'seznam slapov ob ljubljani')
+results = searchIndex(index, 'seznam jezer na koroškem')
 
 
 
 
 # TO-DO: check search query for special words ("seznam,..") and return list of hits (first 10 for example); "seznam jezer na gorenjskem"
 
-analyzeQuery('seznam jezera na gorenjskem, Gorenjska, gorenjsko, hello, working, helped, tabela jezer')
-print(variations('jezero'))
+#analyzeQuery('seznam jezera na gorenjskem, Gorenjska, gorenjsko, hello, working, helped, tabela jezer')
 
 # TO-DO: make variations of word, dummy way? --> use 'did u mean method!!'
-wordCorrector(index, 'jezera na gorenjskem')
+#wordCorrector(index, 'jezera na gorenjskem')

@@ -4,6 +4,7 @@ from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import MultifieldParser, OrGroup
 from whoosh.analysis import *
+from whoosh.query import Term
 from slovenia_info_scra import Attraction, Region, Town
 
 
@@ -12,7 +13,7 @@ specialWords = ['seznam', 'tabela',     # SLO
                 'list',                 # ENG
                 ]
 
-prepositions = ['na', 'v', 'ob', 's', 'z']
+prepositions = ['na', 'v', 'ob', 'pri', 's', 'z']
 
 
 # schema for attribute entries
@@ -111,7 +112,7 @@ def init():
 def searchIndex(index, text):
 
     # look at the query for special words
-    newText, resultLimit = analyzeQuery(index, text)
+    newText, resultLimit, filterQuery = analyzeQuery(index, text)
 
     # search for a given string
     with index.searcher() as searcher:
@@ -120,7 +121,7 @@ def searchIndex(index, text):
         # in case of multiple words in query, use OR (query: 'lake bled' => 'lake' OR 'bled'), but boost score of items that contain both tokens
         orGroup = OrGroup.factory(1.5)
         query = MultifieldParser(["name", "type", "regionName", "description", "tags", "topResult"], index.schema, group=orGroup).parse(newText)
-        results = searcher.search(query, limit=resultLimit, terms=True)
+        results = searcher.search(query, limit=resultLimit, terms=True, filter=filterQuery)
         print('Number of hits:', len(results))
 
 
@@ -154,44 +155,80 @@ def analyzeQuery(index, query):
     text = ' '.join(newQuery)
 
     # if limit = 10, we want to make search a bit more general, since we need more results based on type, not name (probably)
+    filterQuery = None
     if limit == 10:
-        text = wordCorrector(index, text)
+        text, filterQuery = wordCorrector(index, text)
 
 
     print('New user query after analysis:', text)
 
-    return text, limit
+    return text, limit, filterQuery
 
 
 
 def wordCorrector(index, text):
 
+    # here we try to do all the smart things to make search more accurate
+
     # look for any prepositions and remove them (as stopwords)
     sa = StandardAnalyzer(stoplist=prepositions)
     analyzedText = []
-    for token in sa(text, removestops=True):
-        analyzedText.append(token.text)
+    
+    # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take the index of the first one
+    locationIndex = -1
+    for i, token in enumerate(sa(text, removestops=False)):
+        if token.stopped == True and locationIndex == -1:
+            locationIndex = i
+        else:
+            analyzedText.append(token.text)
 
+    filterQuery2 = None
     # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
     with index.searcher() as s:
-        corrector1 = s.corrector('regionName')
+        correctorRegion = s.corrector('regionName')
         corrector2 = s.corrector('tags')    # might be better to create a custom word list that has words in singular: jezero, reka, itd..??
+        correctedList1 = []
+        correctedList2 = []
         for i, word in enumerate(analyzedText):
-            corrected1 = corrector1.suggest(word, limit=1)
+            
+            # look for index of a "location word", then check if it matches any region / destination / Town (TO-DO!!)
+            if i == locationIndex:
+                correctedLocation = correctorRegion.suggest(word, limit=1)
+                # if there is a hit, replace original word with a corrected version (or should we remove it??)
+                if len(correctedLocation) > 0:
+                    analyzedText[i] = correctedLocation[0]
+                else:
+                    analyzedText[i] = findCorrectRegion(analyzedText[i])
+                
             corrected2 = corrector2.suggest(word, limit=1)
-            print(word, ', suggestions1:', corrected1, ', suggestions2:', corrector2.suggest(word, limit=1))
-            if len(corrected1) > 0:
-                analyzedText[i] = corrected1[0]
+            print(word, ', suggestions1:', correctedLocation, ', suggestions2:', corrector2.suggest(word, limit=1))
+            if len(correctedLocation) > 0:
+                analyzedText[i] = correctedLocation[0]
+                correctedList1.append(correctedLocation[0])
+                filterQuery1 = Term("regionName", correctedLocation[0])
             elif len(corrected2) > 0:
                 analyzedText[i] = corrected2[0]
+                correctedList2.append(corrected2[0])
+                filterQuery2 = Term("tags", correctedList2)
 
         # turn list back to string
         text = ' '.join(analyzedText)
-        print('Corrected text:', text)
+
+        # put together a filter query
+
 
         # TO-DO: filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
 
-        return text
+        return text, filterQuery2
+
+
+
+def findCorrectRegion(word):
+
+    # TO-DO: based on Region of most hits for a given word, return region?
+
+    return word;
+
 
 
 

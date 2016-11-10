@@ -4,7 +4,7 @@ from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import MultifieldParser, OrGroup
 from whoosh.analysis import *
-from whoosh.query import Term
+from whoosh.query import *
 from slovenia_info_scra import Attraction, Region, Town
 
 
@@ -13,7 +13,7 @@ specialWords = ['seznam', 'tabela',     # SLO
                 'list',                 # ENG
                 ]
 
-prepositions = ['na', 'v', 'ob', 'pri', 's', 'z']
+prepositions = ['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven']
 
 
 # schema for attribute entries
@@ -23,14 +23,14 @@ attrSchema = Schema(id=ID(stored=True),
                     address=TEXT,
                     phone=KEYWORD(commas=True),
                     webpage=ID,
-                    tags=KEYWORD(commas=True, scorable=True, lowercase=True, field_boost=1.5),
-                    type=ID(stored=True, field_boost=1),
+                    tags=KEYWORD(commas=True, scorable=True, lowercase=True),
+                    type=ID(stored=True, field_boost=1.3),
                     description=TEXT(field_boost=0.01),
                     picture=ID,
                     regionName=TEXT(stored=True),
                     regionID=ID,
-                    destination=TEXT,
-                    place=TEXT,
+                    destination=TEXT(stored=True),
+                    place=TEXT(stored=True),
                     gpsX=NUMERIC,
                     gpsY=NUMERIC,
                     topResult=BOOLEAN,
@@ -119,8 +119,8 @@ def searchIndex(index, text):
         # using MultifieldParser to search all relevant fields
 
         # in case of multiple words in query, use OR (query: 'lake bled' => 'lake' OR 'bled'), but boost score of items that contain both tokens
-        orGroup = OrGroup.factory(1.5)
-        query = MultifieldParser(["name", "type", "regionName", "description", "tags", "topResult"], index.schema, group=orGroup).parse(newText)
+        orGroup = OrGroup.factory(0.9)
+        query = MultifieldParser(["name", "type", "regionName", "description", "tags", "topResult", "destination", "place"], index.schema, group=orGroup).parse(newText)
         results = searcher.search(query, limit=resultLimit, terms=True, filter=filterQuery)
         print('Number of hits:', len(results))
 
@@ -174,56 +174,83 @@ def wordCorrector(index, text):
     sa = StandardAnalyzer(stoplist=prepositions)
     analyzedText = []
     
-    # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take the index of the first one
+    # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take the index of the last one
     locationIndex = -1
     for i, token in enumerate(sa(text, removestops=False)):
-        if token.stopped == True and locationIndex == -1:
+        if token.stopped == True:
             locationIndex = i
         else:
             analyzedText.append(token.text)
 
-    filterQuery2 = None
+    allowLocation = None
+    allowType = None
     # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
     with index.searcher() as s:
         correctorRegion = s.corrector('regionName')
-        corrector2 = s.corrector('tags')    # might be better to create a custom word list that has words in singular: jezero, reka, itd..??
+        correctorDestination = s.corrector('destination')
+        correctorPlace = s.corrector('place')
+        correctorType = s.corrector('type')    # might be better to create a custom word list that has words in singular: jezero, reka, itd..??
         correctedList1 = []
         correctedList2 = []
         for i, word in enumerate(analyzedText):
             
-            # look for index of a "location word", then check if it matches any region / destination / Town (TO-DO!!)
+            # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
             if i == locationIndex:
-                correctedLocation = correctorRegion.suggest(word, limit=1)
-                # if there is a hit, replace original word with a corrected version (or should we remove it??)
-                if len(correctedLocation) > 0:
-                    analyzedText[i] = correctedLocation[0]
+                correctedRegion = correctorRegion.suggest(word, limit=1)
+                correctedDestination = correctorDestination.suggest(word, limit=1)
+                correctedPlace = correctorPlace.suggest(word, limit=1)
+                print(word, ', suggestions for location:', correctedRegion, correctedDestination, correctedPlace)
+
+                # if there is a hit, replace original word with a corrected version (or should we remove it, or not correct it at all??)
+                allowLocation = None    # location filter
+                if len(correctedRegion) > 0:
+                    analyzedText[i] = correctedRegion[0]
+                    allowLocation = Term("regionName", correctedRegion[0])
+                elif len(correctedDestination) > 0:
+                    analyzedText[i] = correctedDestination[0]
+                    allowLocation = Term("destination", correctedDestination[0])
+                elif len(correctedPlace) > 0:
+                    analyzedText[i] = correctedPlace[0]
+                    allowLocation = Term("place", correctedPlace[0])
                 else:
-                    analyzedText[i] = findCorrectRegion(analyzedText[i])
-                
-            corrected2 = corrector2.suggest(word, limit=1)
-            print(word, ', suggestions1:', correctedLocation, ', suggestions2:', corrector2.suggest(word, limit=1))
-            if len(correctedLocation) > 0:
-                analyzedText[i] = correctedLocation[0]
-                correctedList1.append(correctedLocation[0])
-                filterQuery1 = Term("regionName", correctedLocation[0])
-            elif len(corrected2) > 0:
-                analyzedText[i] = corrected2[0]
-                correctedList2.append(corrected2[0])
-                filterQuery2 = Term("tags", correctedList2)
+                    analyzedText[i] = findCorrectLocation(word)
+
+
+            # other words - check corrections of 'type' field
+            else:
+                allowType = None
+                correctedType = correctorType.suggest(word, limit=1)
+                print(word, 'suggestions for type:', correctedType)
+                if len(correctedType) > 0:
+                    analyzedText[i] = correctedType[0]
+                    allowType = Term("type", correctedType[0])
+
+
 
         # turn list back to string
         text = ' '.join(analyzedText)
 
-        # put together a filter query
-
 
         # TO-DO: filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
+        print('Filters:', allowLocation, allowType)
 
-        return text, filterQuery2
+        # put together a filter query
+        if allowLocation and allowType:
+            filter = And([allowLocation, allowType])
+        elif allowLocation:
+            filter = allowLocation
+        elif allowType:
+            filter = allowType
+        else:
+            filter = None
+        print('Filter:', filter)
+
+
+        return text, filter
 
 
 
-def findCorrectRegion(word):
+def findCorrectLocation(word):
 
     # TO-DO: based on Region of most hits for a given word, return region?
 
@@ -238,7 +265,7 @@ def findCorrectRegion(word):
 
 # testing search
 index = open_dir("index")
-results = searchIndex(index, 'seznam slapov ob ljubljani')
+results = searchIndex(index, 'seznam gradov na dolenjskem')
 results = searchIndex(index, 'seznam jezer na koroškem')
 
 

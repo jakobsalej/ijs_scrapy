@@ -2,7 +2,7 @@ import sys
 sys.path.append('../')
 
 from flask import Flask, render_template, request
-from search import searchIndex
+from search import analyzeQuery
 from models import *
 from whoosh.index import open_dir
 
@@ -21,7 +21,7 @@ def search():
         # perform a search, calling def from search.py
         # set a path to correct 'index' dir
         index = open_dir("../index")
-        dict = searchIndex(index, text)
+        dict = analyzeQuery(index, text)
 
     return render_template('results.html', results=dict)
 

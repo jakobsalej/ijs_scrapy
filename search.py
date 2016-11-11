@@ -2,7 +2,7 @@ import os
 import collections
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
-from whoosh.qparser import MultifieldParser, OrGroup
+from whoosh.qparser import MultifieldParser, OrGroup, QueryParser
 from whoosh.analysis import *
 from whoosh.query import *
 from slovenia_info_scra import Attraction, Region, Town
@@ -24,7 +24,8 @@ attrSchema = Schema(id=ID(stored=True),
                     phone=KEYWORD(commas=True),
                     webpage=ID,
                     tags=KEYWORD(commas=True, scorable=True, lowercase=True),
-                    type=ID(stored=True, field_boost=1.3),
+                    #type=ID(stored=True, field_boost=1.3, lowercase=True),
+                    type=KEYWORD(stored=True, field_boost=1.3, lowercase=True, scorable=True),
                     description=TEXT(field_boost=0.01),
                     picture=ID,
                     regionName=TEXT(stored=True),
@@ -109,10 +110,7 @@ def init():
 
 
 
-def searchIndex(index, text):
-
-    # look at the query for special words
-    newText, resultLimit, filterQuery = analyzeQuery(index, text)
+def searchIndex(index, newText, resultLimit, filterQuery):
 
     # search for a given string
     with index.searcher() as searcher:
@@ -138,23 +136,58 @@ def searchIndex(index, text):
 
 def analyzeQuery(index, query):
 
+    # before we start with analysis, let's check if there is a hit that matches search query word for word in title; if it does, return it
+
+    # tokenizer, lowercase filters
+    sa = StandardAnalyzer(stoplist=None)
+    parser = QueryParser("name", schema=index.schema)
+    newQuery = []
+    for token in sa(query):
+        newQuery.append(token.text)
+
+    newQuery = ' '.join(newQuery)
+    newQueryPhrase = '"' + newQuery + '"'
+    filterName = parser.parse(newQueryPhrase)
+    hit = searchIndex(index, query, 1, filterName)
+    print(hit)
+
+    # check again if name is exactly the same as search query; first we have to lowercase name of the hit
+    for key in hit:
+        hitName = []
+        for token in sa(hit[key]['name']):
+            hitName.append(token.text)
+        hitName = ' '.join(hitName)
+        print('Comparing', newQuery, hitName)
+        if hitName == newQuery:
+            print('EXACT MATCH!!')
+            return hit
+
+
+    # if there was no exact hit (query == name of first result), we try to do some smart things
+
     # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
     sa = StandardAnalyzer(stoplist=specialWords)
     print([(token.text, token.stopped) for token in sa(query, removestops=False)])
 
     limit = 1
     newQuery = []
-    for token in sa(query, removestops=False):
-        if token.stopped == True:
-            # stopword detected, do what you have to do
-            limit = 10
-        else:
-            newQuery.append(token.text)
+    with index.searcher() as s:
+        correctorType = s.corrector('type')
+        for token in sa(query, removestops=False):
+            #print('Tokens:', token.text, correctorType.suggest(token.text, limit=1, maxdist=1))
+            # if we detect a stopword or if word/type is in plural (which we check by comparing it to type field with 0 distance == no changes; type fields has everything in plural?), we want more than one result
+            if token.stopped == True:
+                limit = 10
+            elif len(correctorType.suggest(token.text, limit=1, maxdist=0)) > 0:
+                limit = 10
+                newQuery.append(token.text)
+            else:
+                newQuery.append(token.text)
 
     # turn list back to string
     text = ' '.join(newQuery)
 
-    # if limit = 10, we want to make search a bit more general, since we need more results based on type, not name (probably)
+    # if limit = 10, we want to make search a bit more general because a stopword/plural was detected, since we need more results based on type, not name (probably)
     filterQuery = None
     if limit == 10:
         text, filterQuery = wordCorrector(index, text)
@@ -162,7 +195,7 @@ def analyzeQuery(index, query):
 
     print('New user query after analysis:', text)
 
-    return text, limit, filterQuery
+    return searchIndex(index, text, limit, filterQuery)
 
 
 
@@ -231,8 +264,8 @@ def wordCorrector(index, text):
         text = ' '.join(analyzedText)
 
 
-        # TO-DO: filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
-        print('Filters:', allowLocation, allowType)
+        # filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
+        #print('Filters:', allowLocation, allowType)
 
         # put together a filter query
         if allowLocation and allowType:
@@ -265,15 +298,21 @@ def findCorrectLocation(word):
 
 # testing search
 index = open_dir("index")
-results = searchIndex(index, 'seznam gradov na dolenjskem')
-results = searchIndex(index, 'seznam jezer na koroškem')
+results = analyzeQuery(index, 'seznam gradov na dolenjskem')
+results = analyzeQuery(index, 'seznam jezer na koroškem')
+results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
+results = analyzeQuery(index, 'reke v ljubljani')   #!!!
+
+#results = analyzeQuery(index, 'Jezera na koroškem')
+#results = analyzeQuery(index, 'Blejsko jezero')
+#results = analyzeQuery(index, 'lovrenška jezera')
+#results = analyzeQuery(index, 'Lovrenška jezera')
+#results = analyzeQuery(index, 'jezera')
 
 
 
 
 # TO-DO: check search query for special words ("seznam,..") and return list of hits (first 10 for example); "seznam jezer na gorenjskem"
-
-#analyzeQuery('seznam jezera na gorenjskem, Gorenjska, gorenjsko, hello, working, helped, tabela jezer')
 
 # TO-DO: make variations of word, dummy way? --> use 'did u mean method!!'
 #wordCorrector(index, 'jezera na gorenjskem')

@@ -136,49 +136,27 @@ def searchIndex(index, newText, resultLimit, filterQuery):
 
 def analyzeQuery(index, query):
 
-    # before we start with analysis, let's check if there is a hit that matches search query word for word in title; if it does, return it
-
-    # tokenizer, lowercase filters
-    sa = StandardAnalyzer(stoplist=None)
-    parser = QueryParser("name", schema=index.schema)
-    newQuery = []
-    for token in sa(query):
-        newQuery.append(token.text)
-
-    newQuery = ' '.join(newQuery)
-    newQueryPhrase = '"' + newQuery + '"'
-    filterName = parser.parse(newQueryPhrase)
-    hit = searchIndex(index, query, 1, filterName)
-    print(hit)
-
-    # check again if name is exactly the same as search query; first we have to lowercase name of the hit
-    for key in hit:
-        hitName = []
-        for token in sa(hit[key]['name']):
-            hitName.append(token.text)
-        hitName = ' '.join(hitName)
-        print('Comparing', newQuery, hitName)
-        if hitName == newQuery:
-            print('EXACT MATCH!!')
-            return hit
-
+    # before we start with analysis, let's check if there is a hit that matches search query word for word in title
+    resultHit = checkOneHit(index, query)
+    if resultHit:
+        return resultHit
 
     # if there was no exact hit (query == name of first result), we try to do some smart things
-
     # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
     sa = StandardAnalyzer(stoplist=specialWords)
-    print([(token.text, token.stopped) for token in sa(query, removestops=False)])
+    print('Special words: ', [(token.text, token.stopped) for token in sa(query, removestops=False)])
 
+    # look for stopwords (seznam, tabela) or plural form to decide if user wants more than one result
     limit = 1
     newQuery = []
     with index.searcher() as s:
         correctorType = s.corrector('type')
         for token in sa(query, removestops=False):
-            #print('Tokens:', token.text, correctorType.suggest(token.text, limit=1, maxdist=1))
-            # if we detect a stopword or if word/type is in plural (which we check by comparing it to type field with 0 distance == no changes; type fields has everything in plural?), we want more than one result
-            if token.stopped == True:
+            # len(token.test) > 1 is needed as Whoosh automatically removes all words that are only one letter long - but we need them as prepositions (s, z, v)
+            if token.stopped == True and len(token.text) > 1:
                 limit = 10
             elif len(correctorType.suggest(token.text, limit=1, maxdist=0)) > 0:
+                print('Found type in plural, set limit to 10!')
                 limit = 10
                 newQuery.append(token.text)
             else:
@@ -199,6 +177,35 @@ def analyzeQuery(index, query):
 
 
 
+def checkOneHit(index, query):
+
+    # tokenizer, lowercase filters
+    sa = StandardAnalyzer(stoplist=None)
+    parser = QueryParser("name", schema=index.schema)
+    newQuery = []
+    for token in sa(query):
+        newQuery.append(token.text)
+
+    newQuery = ' '.join(newQuery)
+    newQueryPhrase = '"' + newQuery + '"'
+    filterName = parser.parse(newQueryPhrase)
+    hit = searchIndex(index, query, 1, filterName)
+
+    # check again if name is exactly the same as search query; first we have to lowercase all words; if there is a match, just return ONE result and done!
+    for key in hit:
+        hitName = []
+        for token in sa(hit[key]['name']):
+            hitName.append(token.text)
+        hitName = ' '.join(hitName)
+        print('Comparing names:', newQuery, hitName)
+        if hitName == newQuery:
+            print('EXACT MATCH!!')
+            return hit
+
+    return None
+
+
+
 def wordCorrector(index, text):
 
     # here we try to do all the smart things to make search more accurate
@@ -207,7 +214,7 @@ def wordCorrector(index, text):
     sa = StandardAnalyzer(stoplist=prepositions)
     analyzedText = []
     
-    # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take the index of the last one
+    # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take index of the last one
     locationIndex = -1
     for i, token in enumerate(sa(text, removestops=False)):
         if token.stopped == True:
@@ -247,6 +254,7 @@ def wordCorrector(index, text):
                     allowLocation = Term("place", correctedPlace[0])
                 else:
                     analyzedText[i] = findCorrectLocation(word)
+                    allowLocation = Term("regionName", analyzedText[i])
 
 
             # other words - check corrections of 'type' field
@@ -286,8 +294,41 @@ def wordCorrector(index, text):
 def findCorrectLocation(word):
 
     # TO-DO: based on Region of most hits for a given word, return region?
+    numOfResults = 30
+    results = searchIndex(index, word, numOfResults, None)
 
-    return word;
+    placesRegion = dict()
+    max = 0
+    maxName = None
+
+    for i, key in enumerate(results):
+        resultRegion = results[key]['regionName']
+        placesRegion, max, maxName = countRegion(placesRegion, resultRegion, max, maxName)
+
+
+
+    print('ALI GRE ZA REGIJO:', maxName)
+    return maxName;
+
+
+def countRegion(placesRegion, result, max, maxName):
+
+    exists = False
+    for key in placesRegion:
+        if key == result:
+            placesRegion[key]['count'] +=1
+            exists = True
+            if placesRegion[key]['count'] > max:
+                max = placesRegion[key]['count']
+                maxName = key
+
+    if exists == False:
+        placesRegion[result] = {'count': 1}
+        if placesRegion[result]['count'] > max:
+            max = placesRegion[result]['count']
+            maxName = result
+
+    return placesRegion, max, maxName
 
 
 
@@ -298,16 +339,16 @@ def findCorrectLocation(word):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'seznam gradov na dolenjskem')
-results = analyzeQuery(index, 'seznam jezer na koroškem')
+#results = analyzeQuery(index, 'seznam gradov na dolenjskem')
+#results = analyzeQuery(index, 'seznam jezer na koroškem')
 results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
-results = analyzeQuery(index, 'reke v ljubljani')   #!!!
+results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
 #results = analyzeQuery(index, 'Jezera na koroškem')
 #results = analyzeQuery(index, 'Blejsko jezero')
 #results = analyzeQuery(index, 'lovrenška jezera')
-#results = analyzeQuery(index, 'Lovrenška jezera')
-#results = analyzeQuery(index, 'jezera')
+results = analyzeQuery(index, 'Lovrenška jezera')
+results = analyzeQuery(index, 'kmetije na primorskem')
 
 
 

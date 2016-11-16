@@ -253,8 +253,11 @@ def wordCorrector(index, text):
                     analyzedText[i] = correctedPlace[0]
                     allowLocation = Term("place", correctedPlace[0])
                 else:
-                    analyzedText[i] = findCorrectLocation(word)
-                    allowLocation = Term("regionName", analyzedText[i])
+                    detectedRegion = findCorrectLocation(word)
+                    analyzedText[i] = detectedRegion
+                    # ugly fix: take only the first word of region and LOWERCASE it! - it doesn't work because region is made of more than one word???
+                    detectedRegionSplit = detectedRegion.split()
+                    allowLocation = Term("regionName", detectedRegionSplit[0].lower())
 
 
             # other words - check corrections of 'type' field
@@ -264,7 +267,7 @@ def wordCorrector(index, text):
                 print(word, 'suggestions for type:', correctedType)
                 if len(correctedType) > 0:
                     analyzedText[i] = correctedType[0]
-                    allowType = Term("type", correctedType[0])
+                    allowType = Term("type", correctedType[0].lower())
 
 
 
@@ -313,6 +316,8 @@ def findCorrectLocation(word):
 
 def countRegion(placesRegion, result, max, maxName):
 
+    # if region already in 'placesRegion' increase count by 1, else add it
+
     exists = False
     for key in placesRegion:
         if key == result:
@@ -341,14 +346,15 @@ def countRegion(placesRegion, result, max, maxName):
 index = open_dir("index")
 #results = analyzeQuery(index, 'seznam gradov na dolenjskem')
 #results = analyzeQuery(index, 'seznam jezer na koroškem')
-results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
-results = analyzeQuery(index, 'reke v notranjskem')   #!!!
+#results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
+#results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
 #results = analyzeQuery(index, 'Jezera na koroškem')
 #results = analyzeQuery(index, 'Blejsko jezero')
 #results = analyzeQuery(index, 'lovrenška jezera')
-results = analyzeQuery(index, 'Lovrenška jezera')
-results = analyzeQuery(index, 'kmetije na primorskem')
+#results = analyzeQuery(index, 'Lovrenška jezera')
+results = analyzeQuery(index, 'kmetija na dolenjskem')
+results = analyzeQuery(index, 'kmetija na dolenjskem')
 
 
 

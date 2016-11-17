@@ -8,7 +8,7 @@ from whoosh.query import *
 from slovenia_info_scra import Attraction, Region, Town
 
 
-# list of special words we'd like to detect
+# list of special words we'd like to detect to show more than one result
 specialWords = ['seznam', 'tabela',     # SLO
                 'list',                 # ENG
                 ]
@@ -23,7 +23,7 @@ attrSchema = Schema(id=ID(stored=True),
                     address=TEXT,
                     phone=KEYWORD(commas=True),
                     webpage=ID,
-                    tags=KEYWORD(commas=True, scorable=True, lowercase=True),
+                    tags=KEYWORD(commas=True, scorable=True, lowercase=True, stored=True),
                     #type=ID(stored=True, field_boost=1.3, lowercase=True),
                     type=KEYWORD(stored=True, field_boost=1.3, lowercase=True, scorable=True),
                     description=TEXT(field_boost=0.01),
@@ -128,7 +128,7 @@ def searchIndex(index, newText, resultLimit, filterQuery):
 
         for i, result in enumerate(results):
             print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
-            dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'typeID': result['typeID'], 'score': results.score(i) }
+            dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'score': results.score(i) }
 
         return dict
 
@@ -136,9 +136,11 @@ def searchIndex(index, newText, resultLimit, filterQuery):
 
 def analyzeQuery(index, query):
 
+    print('Original search query:', query)
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
     resultHit = checkOneHit(index, query)
     if resultHit:
+        print('------------------------------------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
 
     # if there was no exact hit (query == name of first result), we try to do some smart things
@@ -155,8 +157,9 @@ def analyzeQuery(index, query):
             # len(token.test) > 1 is needed as Whoosh automatically removes all words that are only one letter long - but we need them as prepositions (s, z, v)
             if token.stopped == True and len(token.text) > 1:
                 limit = 10
-            elif len(correctorType.suggest(token.text, limit=1, maxdist=0)) > 0:
-                print('Found type in plural, set limit to 10!')
+            # len(token.text) > 2 is needed, otherwise type matches words like 'na'
+            elif len(token.text) > 2 and len(correctorType.suggest(token.text, limit=1, maxdist=0, prefix=2)) > 0:
+                print('Found type in plural, set limit to 10!:', token.text)
                 limit = 10
                 newQuery.append(token.text)
             else:
@@ -168,12 +171,56 @@ def analyzeQuery(index, query):
     # if limit = 10, we want to make search a bit more general because a stopword/plural was detected, since we need more results based on type, not name (probably)
     filterQuery = None
     if limit == 10:
-        text, filterQuery = wordCorrector(index, text)
-
+        text, gotLocation, locationFilter, typeFilter, locationField, correctedLocation = wordCorrector(index, text)
+        filterQuery = joinFilters(typeFilter, locationFilter)
 
     print('New user query after analysis:', text)
 
-    return searchIndex(index, text, limit, filterQuery)
+    #get results; if empty, make filters 'broader'
+    hits = searchIndex(index, text, limit, filterQuery)
+    if len(hits) == 0:
+        print("Searching again without filters!")
+        # more-than-one-result search
+        if limit == 10:
+
+            newLocationFilter, fieldOptions = changeLocationFilter(gotLocation, locationField, correctedLocation, locationFilter)
+
+            while len(hits) == 0 and gotLocation > 1:
+                newFilter = None
+                if newLocationFilter[gotLocation-2] != '':
+                    if newLocationFilter[gotLocation-2] != None:
+                        newFilter = Term(fieldOptions[gotLocation-2], newLocationFilter[gotLocation-2])
+
+                    filterQuery = joinFilters(typeFilter, newFilter)
+                    print('Searching again with new filter:', filterQuery)
+                    hits = searchIndex(index, text, limit, filterQuery)
+
+                gotLocation -= 1
+
+                    # TO-DO: OPTIMIZE THIS!!
+
+    print('------------------------------------------------------------------------------------------------------------------------------\n\n\n')
+    return hits
+
+
+
+def changeLocationFilter(gotLocation, locationField, correctedLocation, locationFilter):
+
+    print("Changing filters!")
+    # let's see what we have and try to expand the location filter
+    # locationOptions = [no location filter, region, destination, place]
+    locationOptions = [None, None, None]
+    fieldOptions = ['regionName', 'destination', 'place']
+
+    hits = searchIndex(index, correctedLocation, 1, locationFilter)
+    for key in hits:
+        print(hits[key])
+        locationOptions[0] = hits[key]['regionName'].lower()
+        locationOptions[1] = hits[key]['destination'].lower()
+        locationOptions[2] = hits[key]['place'].lower()
+
+    print('Following filters for location are available:', locationOptions)
+    return locationOptions, fieldOptions
 
 
 
@@ -222,76 +269,88 @@ def wordCorrector(index, text):
         else:
             analyzedText.append(token.text)
 
+    # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
     allowLocation = None
     allowType = None
-    # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
+    # 0 = suggested region, 1 = region, 2 = destination, 3 = place
+    gotlocation = 0
+    corrected = None
+    locationField = None
     with index.searcher() as s:
         correctorRegion = s.corrector('regionName')
         correctorDestination = s.corrector('destination')
         correctorPlace = s.corrector('place')
         correctorType = s.corrector('type')    # might be better to create a custom word list that has words in singular: jezero, reka, itd..??
-        correctedList1 = []
-        correctedList2 = []
+        allowLocation = None  # location filter
         for i, word in enumerate(analyzedText):
             
             # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
             if i == locationIndex:
-                correctedRegion = correctorRegion.suggest(word, limit=1)
-                correctedDestination = correctorDestination.suggest(word, limit=1)
-                correctedPlace = correctorPlace.suggest(word, limit=1)
+                correctedRegion = correctorRegion.suggest(word, limit=1, prefix=2)
+                correctedDestination = correctorDestination.suggest(word, limit=1, prefix=2)
+                correctedPlace = correctorPlace.suggest(word, limit=1, prefix=2)
                 print(word, ', suggestions for location:', correctedRegion, correctedDestination, correctedPlace)
 
                 # if there is a hit, replace original word with a corrected version (or should we remove it, or not correct it at all??)
-                allowLocation = None    # location filter
                 if len(correctedRegion) > 0:
-                    analyzedText[i] = correctedRegion[0]
-                    allowLocation = Term("regionName", correctedRegion[0])
+                    gotlocation = 1
+                    corrected = correctedRegion[0]  # split?
+                    locationField = 'regionName'
                 elif len(correctedDestination) > 0:
-                    analyzedText[i] = correctedDestination[0]
-                    allowLocation = Term("destination", correctedDestination[0])
+                    gotlocation = 2
+                    corrected = correctedDestination[0]
+                    locationField = 'destination'
                 elif len(correctedPlace) > 0:
-                    analyzedText[i] = correctedPlace[0]
-                    allowLocation = Term("place", correctedPlace[0])
+                    gotlocation = 3
+                    corrected = correctedPlace[0]
+                    locationField = 'place'
                 else:
                     detectedRegion = findCorrectLocation(word)
-                    analyzedText[i] = detectedRegion
+                    gotlocation = 0
                     # ugly fix: take only the first word of region and LOWERCASE it! - it doesn't work because region is made of more than one word???
                     detectedRegionSplit = detectedRegion.split()
-                    allowLocation = Term("regionName", detectedRegionSplit[0].lower())
+                    corrected = detectedRegionSplit[0].lower()
+                    locationField = 'regionName'
+                
+                if not gotlocation == 0:
+                    analyzedText[i] = corrected
+                if locationField and corrected:
+                    allowLocation = Term(locationField, corrected)
 
 
             # other words - check corrections of 'type' field
             else:
                 allowType = None
-                correctedType = correctorType.suggest(word, limit=1)
+                correctedType = correctorType.suggest(word, limit=1, prefix=2)
                 print(word, 'suggestions for type:', correctedType)
                 if len(correctedType) > 0:
                     analyzedText[i] = correctedType[0]
                     allowType = Term("type", correctedType[0].lower())
 
 
-
         # turn list back to string
         text = ' '.join(analyzedText)
 
-
-        # filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
-        #print('Filters:', allowLocation, allowType)
-
-        # put together a filter query
-        if allowLocation and allowType:
-            filter = And([allowLocation, allowType])
-        elif allowLocation:
-            filter = allowLocation
-        elif allowType:
-            filter = allowType
-        else:
-            filter = None
-        print('Filter:', filter)
+        return text, gotlocation, allowLocation, allowType, locationField, corrected
 
 
-        return text, filter
+def joinFilters(filter1, filter2):
+    
+    # filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
+    # print('Filters:', filter1, filter2)
 
+    # put together a filter query
+    if filter1 and filter2:
+        filter = And([filter1, filter2])
+    elif filter1:
+        filter = filter1
+    elif filter2:
+        filter = filter2
+    else:
+        filter = None
+    print('Filter:', filter)
+
+    return filter
 
 
 def findCorrectLocation(word):
@@ -310,7 +369,7 @@ def findCorrectLocation(word):
 
 
 
-    print('ALI GRE ZA REGIJO:', maxName)
+    print('Region suggestion:', maxName)
     return maxName;
 
 
@@ -349,12 +408,12 @@ index = open_dir("index")
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
-#results = analyzeQuery(index, 'Jezera na koroškem')
-#results = analyzeQuery(index, 'Blejsko jezero')
-#results = analyzeQuery(index, 'lovrenška jezera')
-#results = analyzeQuery(index, 'Lovrenška jezera')
+results = analyzeQuery(index, 'kmetije v ljubljani')
+results = analyzeQuery(index, 'arhitekturna dediščina v ljubljani')
+results = analyzeQuery(index, 'lovrenška jezera')
+results = analyzeQuery(index, 'reke na primorskem')
 results = analyzeQuery(index, 'kmetija na dolenjskem')
-results = analyzeQuery(index, 'kmetija na dolenjskem')
+results = analyzeQuery(index, 'kmetije na morje')
 
 
 

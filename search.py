@@ -176,13 +176,13 @@ def analyzeQuery(index, query):
 
     print('New user query after analysis:', text)
 
-    #get results; if empty, make filters 'broader'
+    #get results; if empty, change location filters
     hits = searchIndex(index, text, limit, filterQuery)
     if len(hits) == 0:
-        print("Searching again without filters!")
+
         # more-than-one-result search
         if limit == 10:
-
+            # returns 3 location filter options: place, destination, region; if there are still no results after applaying them, remove location filter
             newLocationFilter, fieldOptions = changeLocationFilter(gotLocation, locationField, correctedLocation, locationFilter)
 
             while len(hits) == 0 and gotLocation > 1:
@@ -197,7 +197,7 @@ def analyzeQuery(index, query):
 
                 gotLocation -= 1
 
-                    # TO-DO: OPTIMIZE THIS!!
+                # TO-DO: OPTIMIZE THIS!! change this ugly code
 
     print('------------------------------------------------------------------------------------------------------------------------------\n\n\n')
     return hits
@@ -206,9 +206,8 @@ def analyzeQuery(index, query):
 
 def changeLocationFilter(gotLocation, locationField, correctedLocation, locationFilter):
 
-    print("Changing filters!")
-    # let's see what we have and try to expand the location filter
-    # locationOptions = [no location filter, region, destination, place]
+    # based on locationFilter, get other fields (if available): region, destination, place (we have one already from the filter and we use that one for search)
+    # locationOptions = [region, destination, place]
     locationOptions = [None, None, None]
     fieldOptions = ['regionName', 'destination', 'place']
 
@@ -305,6 +304,7 @@ def wordCorrector(index, text):
                     corrected = correctedPlace[0]
                     locationField = 'place'
                 else:
+                    # in case of no match with region, destination or place
                     detectedRegion = findCorrectLocation(word)
                     gotlocation = 0
                     # ugly fix: take only the first word of region and LOWERCASE it! - it doesn't work because region is made of more than one word???
@@ -334,6 +334,7 @@ def wordCorrector(index, text):
         return text, gotlocation, allowLocation, allowType, locationField, corrected
 
 
+
 def joinFilters(filter1, filter2):
     
     # filter results: http://whoosh.readthedocs.io/en/latest/searching.html#combining-results-objects
@@ -353,9 +354,10 @@ def joinFilters(filter1, filter2):
     return filter
 
 
+
 def findCorrectLocation(word):
 
-    # TO-DO: based on Region of most hits for a given word, return region?
+    # search for word that is supposed to be a location (and does not match neither region, destination or place), determine region based on Region of most hits for a given word
     numOfResults = 30
     results = searchIndex(index, word, numOfResults, None)
 
@@ -373,9 +375,11 @@ def findCorrectLocation(word):
     return maxName;
 
 
+
 def countRegion(placesRegion, result, max, maxName):
 
-    # if region already in 'placesRegion' increase count by 1, else add it
+    # just a helper method for 'findCorrectLocation'
+    # if region already in 'placesRegion' increase count by 1, else add it to dict
 
     exists = False
     for key in placesRegion:

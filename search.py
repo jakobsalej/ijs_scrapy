@@ -182,21 +182,21 @@ def analyzeQuery(index, query):
 
         # more-than-one-result search
         if limit == 10:
-            # returns 3 location filter options: place, destination, region; if there are still no results after applaying them, remove location filter
+            # returns 3 location filter options: place, destination, region; if there are still no results after applaying them, remove location filter completely
             newLocationFilter, fieldOptions = changeLocationFilter(index, correctedLocation, locationFilter)
 
-            while len(hits) == 0 and gotLocation > 1:
-                newFilter = None
-                if newLocationFilter[gotLocation-2] != '':
-                    if newLocationFilter[gotLocation-2] != None:
-                        newFilter = Term(fieldOptions[gotLocation-2], fixFilter(newLocationFilter[gotLocation-2]))
+            while len(hits) == 0 and gotLocation > -1:
+                if newLocationFilter[gotLocation-1] != None and newLocationFilter[gotLocation-1] != '' :
+                    if gotLocation == 0:
+                        # if nothing was found using location filter, try without it
+                        newFilter = None
+                    else:
+                        newFilter = Term(fieldOptions[gotLocation-1], fixFilter(newLocationFilter[gotLocation-1]))
 
                     filterQuery = joinFilters(typeFilter, newFilter)
                     hits = searchIndex(index, text, limit, filterQuery)
 
                 gotLocation -= 1
-
-                # TO-DO: OPTIMIZE THIS!! change this ugly code, never reaches None filters, fix THIS!
 
     print('------------------------------------------------------------------------------------------------------------------------------\n\n\n')
     return hits
@@ -218,6 +218,7 @@ def changeLocationFilter(index, correctedLocation, locationFilter):
         locationOptions[2] = hits[key]['place'].lower()
 
     print('Following filters for location are available:', locationOptions)
+
     return locationOptions, fieldOptions
 
 
@@ -230,8 +231,17 @@ def checkOneHit(index, query):
     sa = StandardAnalyzer(stoplist=None)
     parser = QueryParser("name", schema=index.schema)
     newQuery = []
-    for token in sa(query):
-        newQuery.append(token.text)
+
+    with index.searcher() as s:
+        correctorName = s.corrector('name')
+        for token in sa(query):
+            #correctedName1 = correctorName.suggest(token.text, limit=1, prefix=2, maxdist=0)
+            #correctedName2 = correctorName.suggest(token.text, limit=1, prefix=2, maxdist=1)
+            #if len(correctedName1):
+            #    print('Name suggestion 1:', correctedName1[0])
+            #elif len(correctedName2):
+            #    print('Name suggestion 2:', correctedName2[0])
+            newQuery.append(token.text)
 
     newQuery = ' '.join(newQuery)
     newQueryPhrase = '"' + newQuery + '"'
@@ -270,9 +280,7 @@ def multipleResultsAnalyzer(index, text):
             analyzedText.append(token.text)
 
     # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
-    allowLocation = None
-    allowType = None
-    # 0 = suggested region, 1 = region, 2 = destination, 3 = place
+    # 0 = region, 1 = destination, 2 = place
     gotlocation = 0
     corrected = None
     locationField = None
@@ -280,28 +288,32 @@ def multipleResultsAnalyzer(index, text):
         correctorRegion = s.corrector('regionName')
         correctorDestination = s.corrector('destination')
         correctorPlace = s.corrector('place')
-        correctorType = s.corrector('type')    # might be better to create a custom word list that has words in singular: jezero, reka, itd..?? (maybe use 'name' field, probably has majority of hits in singular)
-        allowLocation = None  # location filter
+        correctorType = s.corrector('type')     # might be better to create a custom word list that has words in singular: jezero, reka, itd..?? (maybe use 'name' field, probably has majority of hits in singular)
+        allowLocation = None                    # location filter
+        allowType = None                        # type filter
+        isLocation = False
         for i, word in enumerate(analyzedText):
             
             # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
             if i == locationIndex:
+                isLocation = True
                 correctedRegion = correctorRegion.suggest(word, limit=1, prefix=2)
                 correctedDestination = correctorDestination.suggest(word, limit=1, prefix=2)
                 correctedPlace = correctorPlace.suggest(word, limit=1, prefix=2)
                 print(word, ', suggestions for location:', correctedRegion, correctedDestination, correctedPlace)
 
                 # if there is a hit, replace original word with a corrected version (or should we remove it, or not correct it at all??)
+                replaceLocationQuery = True
                 if len(correctedRegion) > 0:
-                    gotlocation = 1
+                    gotlocation = 0
                     corrected = correctedRegion[0]  # split?
                     locationField = 'regionName'
                 elif len(correctedDestination) > 0:
-                    gotlocation = 2
+                    gotlocation = 1
                     corrected = correctedDestination[0]
                     locationField = 'destination'
                 elif len(correctedPlace) > 0:
-                    gotlocation = 3
+                    gotlocation = 2
                     corrected = correctedPlace[0]
                     locationField = 'place'
                 else:
@@ -309,9 +321,10 @@ def multipleResultsAnalyzer(index, text):
                     corrected = findCorrectLocation(index, word)
                     gotlocation = 0
                     locationField = 'regionName'
+                    replaceLocationQuery = False
 
                 # change location word in query (except when we find location by searching for region)
-                if not gotlocation == 0:
+                if replaceLocationQuery:
                     analyzedText[i] = corrected
 
                 # set location filter
@@ -319,9 +332,8 @@ def multipleResultsAnalyzer(index, text):
                     allowLocation = Term(locationField, fixFilter(corrected))
 
 
-            # other words - check corrections of 'type' field
-            else:
-                allowType = None
+            # other words - check corrections of 'type' field; once we have location, don't check again (to prevent cases where location is made of more than one word and second word becomes type)
+            elif isLocation == False:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
                 print(word, 'suggestions for type:', correctedType)
                 if len(correctedType) > 0:
@@ -418,7 +430,7 @@ def countRegion(placesRegion, result, max, maxName):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'gradovi v ljubljani')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
+results = analyzeQuery(index, 'grad na krasu')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
 #results = analyzeQuery(index, 'seznam jezer na koroškem')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
@@ -431,4 +443,5 @@ results = analyzeQuery(index, 'gradovi v ljubljani')        # Ljubljanski grad i
 #results = analyzeQuery(index, 'kmetije na morje')
 
 
-# TO-DO: make variations of word, dummy way? --> use 'did u mean method!!'
+# TO-DO: more than one region when searching for 'primorska', for example!!
+# TO-DO: get type from 'vredno ogleda' section!!

@@ -445,3 +445,4 @@ results = analyzeQuery(index, 'grad na krasu')        # Ljubljanski grad is not 
 
 # TO-DO: more than one region when searching for 'primorska', for example!!
 # TO-DO: get type from 'vredno ogleda' section!!
+# TO-DO: put search query in singular?

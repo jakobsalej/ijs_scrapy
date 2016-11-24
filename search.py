@@ -176,7 +176,7 @@ def analyzeQuery(index, query):
 
     print('New user query after analysis:', text)
 
-    #get results; if empty, change location filters
+    # get results; if empty, change location filters
     hits = searchIndex(index, text, limit, filterQuery)
     if len(hits) == 0:
 
@@ -318,7 +318,7 @@ def multipleResultsAnalyzer(index, text):
                     locationField = 'place'
                 else:
                     # in case of no match with region, destination or place
-                    corrected = findCorrectLocation(index, word)
+                    corrected, selectedRegions = findCorrectLocation(index, word)
                     gotlocation = 0
                     locationField = 'regionName'
                     replaceLocationQuery = False
@@ -381,7 +381,7 @@ def joinFilters(filter1, filter2):
 def findCorrectLocation(index, word):
 
     # search for word that is supposed to be a location (and does not match neither region, destination or place), determine region based on Region of most hits for a given word
-    numOfResults = 30
+    numOfResults = 50
     results = searchIndex(index, word, numOfResults, None)
 
     placesRegion = dict()
@@ -389,13 +389,15 @@ def findCorrectLocation(index, word):
     maxName = None
 
     for i, key in enumerate(results):
-        resultRegion = results[key]['regionName']
-        placesRegion, max, maxName = countRegion(placesRegion, resultRegion, max, maxName)
-
-
+        if results[key]['score'] > 0:
+            resultRegion = results[key]['regionName']
+            placesRegion, max, maxName = countRegion(placesRegion, resultRegion, max, maxName)
 
     print('Region suggestion:', maxName)
-    return maxName;
+    print(placesRegion)
+    selectedRegions = selectRegions(placesRegion)
+
+    return maxName, selectedRegions
 
 
 
@@ -423,6 +425,26 @@ def countRegion(placesRegion, result, max, maxName):
 
 
 
+def selectRegions(regionCount):
+
+    selectedRegions = []
+    countAll = 0
+    regionNum = 0
+    for key in regionCount:
+        regionNum += 1
+        countAll += regionCount[key]['count']
+
+    average = countAll/regionNum
+    threshold = 0.2
+    print('Number of regions:', regionNum, '; number of all votes:', countAll, '- average:', countAll/regionNum)
+
+    for key in regionCount:
+        if regionCount[key]['count'] > countAll*threshold:
+            selectedRegions.append(key)
+
+    print('Selected regions:', selectedRegions)
+    return selectedRegions
+
 
 
 # only run once, to build index
@@ -430,8 +452,8 @@ def countRegion(placesRegion, result, max, maxName):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'grad na krasu')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
-#results = analyzeQuery(index, 'seznam jezer na koroškem')
+results = analyzeQuery(index, 'gradovi na jezeru')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
+results = analyzeQuery(index, 'seznam jezer na koroškem')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
@@ -444,5 +466,7 @@ results = analyzeQuery(index, 'grad na krasu')        # Ljubljanski grad is not 
 
 
 # TO-DO: more than one region when searching for 'primorska', for example!!
+# TO-DO: if score == 0, dont count - DONE
 # TO-DO: get type from 'vredno ogleda' section!!
 # TO-DO: put search query in singular?
+# TO-DO: REST api, get query, return json

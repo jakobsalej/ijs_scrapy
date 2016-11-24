@@ -280,15 +280,15 @@ def multipleResultsAnalyzer(index, text):
             analyzedText.append(token.text)
 
     # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
-    # 0 = region, 1 = destination, 2 = place
-    gotlocation = 0
-    corrected = None
-    locationField = None
+
     with index.searcher() as s:
         correctorRegion = s.corrector('regionName')
         correctorDestination = s.corrector('destination')
         correctorPlace = s.corrector('place')
         correctorType = s.corrector('type')     # might be better to create a custom word list that has words in singular: jezero, reka, itd..?? (maybe use 'name' field, probably has majority of hits in singular)
+        correctorName = s.corrector('name')
+        gotlocation = 0                         # 0 = region, 1 = destination, 2 = place
+        corrected = None
         allowLocation = None                    # location filter
         allowType = None                        # type filter
         isLocation = False
@@ -321,30 +321,60 @@ def multipleResultsAnalyzer(index, text):
                     corrected, selectedRegions = findCorrectLocation(index, word)
                     gotlocation = 0
                     locationField = 'regionName'
+                    allowLocation = joinTerms(locationField, selectedRegions)
                     replaceLocationQuery = False
 
-                # change location word in query (except when we find location by searching for region)
-                if replaceLocationQuery:
+                # change location word in query (except when we find location by searching for region) and set filter
+                if replaceLocationQuery and corrected:
                     analyzedText[i] = corrected
-
-                # set location filter
-                if locationField and corrected:
                     allowLocation = Term(locationField, fixFilter(corrected))
+
 
 
             # other words - check corrections of 'type' field; once we have location, don't check again (to prevent cases where location is made of more than one word and second word becomes type)
             elif isLocation == False:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
+                correctedName = correctorName.suggest(word, limit=1, prefix=3, maxdist=3)
                 print(word, 'suggestions for type:', correctedType)
+                print(word, 'suggestions for type name:', correctedName)
                 if len(correctedType) > 0:
                     analyzedText[i] = correctedType[0]
-                    allowType = Term("type", fixFilter(correctedType[0]))
+                    allowType = Term('type', fixFilter(correctedType[0]))
+
+                    # also add things from type 'vredno ogleda' (some items have type 'vredno ogleda', instead of their real type, for example, 'Ljubljanski grad' - instead, we search for 'grad') that have matching name
+                    if len(correctedName) > 0:
+                        addType = 'vredno'
+                        additionalType = Term('type', addType)
+                        additionalTypeName = Term('name', correctedName[0])
+                        additionalTypeFilter = And([additionalType, additionalTypeName])
+                        print(additionalTypeFilter)
+
+                        # join with regular type filter
+                        allowType = Or([allowType, additionalTypeFilter])
+
 
 
         # turn list back to string
         text = ' '.join(analyzedText)
 
         return text, gotlocation, allowLocation, allowType, corrected
+
+
+
+def joinTerms(type, list):
+
+    # join more terms
+
+    termList = []
+    for word in list:
+        newTerm = Term(type, fixFilter(word))
+        termList.append(newTerm)
+
+    joinedTerm = Or(termList)
+    print(termList)
+    print(joinedTerm)
+
+    return joinedTerm
 
 
 
@@ -452,7 +482,7 @@ def selectRegions(regionCount):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'gradovi na jezeru')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
+results = analyzeQuery(index, 'gradovi pri ljubljani')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
 results = analyzeQuery(index, 'seznam jezer na koroškem')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
@@ -465,8 +495,12 @@ results = analyzeQuery(index, 'seznam jezer na koroškem')
 #results = analyzeQuery(index, 'kmetije na morje')
 
 
-# TO-DO: more than one region when searching for 'primorska', for example!!
+# TO-DO: more than one region when searching for 'primorska', for example!! - DONE
 # TO-DO: if score == 0, dont count - DONE
-# TO-DO: get type from 'vredno ogleda' section!!
+# TO-DO: get type from 'vredno ogleda' section!! - DONE
 # TO-DO: put search query in singular?
 # TO-DO: REST api, get query, return json
+
+# TO-DO: build database again, check for duplicates
+
+# TO-DO: fix findCorrectLocation method: don't return maxName and so, just a dict

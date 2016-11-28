@@ -464,9 +464,13 @@ def selectRegions(regionCount):
         regionNum += 1
         countAll += regionCount[key]['count']
 
-    average = countAll/regionNum
+    if regionNum > 0:
+        average = countAll/regionNum
+    else:
+        average = 0
+
     threshold = 0.2
-    print('Number of regions:', regionNum, '; number of all votes:', countAll, '- average:', countAll/regionNum)
+    print('Number of regions:', regionNum, '; number of all votes:', countAll, '- average:', average)
 
     for key in regionCount:
         if regionCount[key]['count'] > countAll*threshold:
@@ -481,9 +485,9 @@ def selectRegions(regionCount):
 #init()
 
 # testing search
-index = open_dir("index")
-results = analyzeQuery(index, 'gradovi pri ljubljani')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
-results = analyzeQuery(index, 'seznam jezer na koroškem')
+#index = open_dir("index")
+#results = analyzeQuery(index, 'gradovi pri ljubljani')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
+#results = analyzeQuery(index, 'seznam jezer na koroškem')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
@@ -492,7 +496,7 @@ results = analyzeQuery(index, 'seznam jezer na koroškem')
 #results = analyzeQuery(index, 'lovrenška jezera')
 #results = analyzeQuery(index, 'reke na primorskem')
 #results = analyzeQuery(index, 'kmetija na dolenjskem')
-#results = analyzeQuery(index, 'kmetije na morje')
+#results = analyzeQuery(index, 'seznam jam na krasu')
 
 
 # TO-DO: more than one region when searching for 'primorska', for example!! - DONE

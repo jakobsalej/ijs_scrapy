@@ -4,9 +4,10 @@ sys.path.append('../')
 from flask import Flask, render_template, request
 from flask_restful import Resource, Api
 from search import analyzeQuery
-from models import *
+from slovenia_info_scra import getFromDB
 from whoosh.index import open_dir
 import json
+
 
 app = Flask(__name__)
 
@@ -28,20 +29,11 @@ def search():
     return render_template('results.html', results=dict)
 
 
-@app.route('/<type>/<id>')
+@app.route('/<type>/<int:id>')
 def attraction(type=None, id=None):
 
     # getting attraction from DB based on ID and type in url
-    id = float(id)
-
-    if type == 'region':
-        item = Region.get(Region.id == id)
-    elif type == 'town':
-        item = Town.get(Town.id == id)
-    elif type == 'attraction':
-        item = Attraction.get(Attraction.id == id)
-
-    print(item.name)
+    item = getFromDB(type, id)
 
     return render_template('attraction.html', item=item)
 
@@ -58,15 +50,19 @@ class QueryAPI(Resource):
         # set a path to correct 'index' dir
         index = open_dir("../index")
         dict = analyzeQuery(index, query)
-        result = json.dumps(dict)
+        result = json.dumps(dict, ensure_ascii=False, indent=4, sort_keys=True)
+        print(result)
 
         return result
 
 
 class ItemAPI(Resource):
     def get(self, type, id):
+        item = getFromDB(type, id)
+        result = json.dumps(item, ensure_ascii=False, indent=4, sort_keys=True)
+        print(result)
 
-        return {'type': type, 'id': id}
+        return result
 
 
 api.add_resource(QueryAPI, '/query/<string:query>', endpoint = 'query')

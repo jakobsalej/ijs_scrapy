@@ -2,6 +2,7 @@ from lxml import html, etree
 import requests
 import time
 from models import *
+from playhouse.shortcuts import model_to_dict
 
 
 
@@ -31,6 +32,31 @@ def prepareLogFiles():
     townLog = open('log_files/town_errors.log', 'w')
 
     return
+
+
+
+def getFromDB(type, id):
+
+    # get item from DB based on id and type
+
+    #id = float(id)
+    item = None
+
+    if type == 'region':
+        item = Region.get(Region.id == id)
+    elif type == 'town':
+        item = Town.get(Town.id == id)
+    elif type == 'attraction':
+        item = Attraction.get(Attraction.id == id)
+
+    if item != None:
+        item = model_to_dict(item, recurse=False)
+        item['timestamp'] = str(item['timestamp'])
+        print('Getting item from DB:', item['name'])
+    else:
+        print('No item found!')
+
+    return item
 
 
 

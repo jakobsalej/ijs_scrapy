@@ -26,8 +26,8 @@ def testQuery(query):
 
 
 # example JSON files
-#testItem('region', 3000)
-testQuery('seznam gradov na primorskem')
+testItem('attraction', 300)
+#testQuery('seznam gradov na primorskem')
 
 
 testItemResult = {

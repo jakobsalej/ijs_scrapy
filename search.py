@@ -22,8 +22,7 @@ attrSchema = Schema(id=ID(stored=True),
                     phone=KEYWORD(commas=True),
                     webpage=ID,
                     tags=KEYWORD(commas=True, scorable=True, lowercase=True, stored=True),
-                    #type=ID(stored=True, field_boost=1.3, lowercase=True),
-                    type=KEYWORD(stored=True, field_boost=1.3, lowercase=True, scorable=True),
+                    type=KEYWORD(stored=True, field_boost=1.2, lowercase=True, scorable=True),
                     description=TEXT(field_boost=0.01),
                     picture=ID,
                     regionName=TEXT(stored=True),
@@ -350,6 +349,7 @@ def multipleResultsAnalyzer(index, text):
 
                     # also add things from type 'vredno ogleda' (some items have type 'vredno ogleda', instead of their real type, for example, 'Ljubljanski grad' - instead, we search for 'grad') that have matching name
                     if len(correctedName) > 0:
+                        analyzedText.append(correctedName[0])
                         addType = 'vredno'
                         additionalType = Term('type', addType)
                         additionalTypeName = Term('name', correctedName[0])
@@ -492,18 +492,11 @@ def selectRegions(regionCount):
 #init()
 
 # testing search
-#index = open_dir("index")
-#results = analyzeQuery(index, 'gradovi pri ljubljani')
+index = open_dir("index")
+results = analyzeQuery(index, 'gradovi pri ljubljani')
 #results = analyzeQuery(index, '')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
-
-#results = analyzeQuery(index, 'kmetije v ljubljani')
-#results = analyzeQuery(index, 'arhitekturna dediščina v ljubljani')
-#results = analyzeQuery(index, 'lovrenška jezera')
-#results = analyzeQuery(index, 'reke na primorskem')
-#results = analyzeQuery(index, 'kmetija na dolenjskem')
-#results = analyzeQuery(index, 'seznam jam na krasu')
 
 
 

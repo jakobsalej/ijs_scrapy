@@ -133,7 +133,7 @@ def regionGetData(regionUrl):
 
     # get data from individual region
     #print('region:', regionUrl)
-
+    
     try:
         page = requests.get(regionUrl)
         elTree = etree.HTML(page.text)
@@ -165,11 +165,12 @@ def regionGetData(regionUrl):
         #print('----------------------------------------\n')
 
         #saving to db
-        newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
-        newRegion.save()
+        if Region.select().where(Region.name == name[0]).exists():
+            newRegion = Region(name = name[0], link = regionUrl, description = description, picture = pictureLink)
+            newRegion.save()
 
-        # let's get attractions from attraction link
-        pageGetLinks(attrLinks, newRegion)
+            # let's get attractions from attraction link
+            pageGetLinks(attrLinks, newRegion)
 
     except Exception as e:
         print('ERROR:', e)
@@ -420,25 +421,26 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
         #print('------------------------------------------\n')
 
         # saving to DB
-        newAttr = Attraction(name = attractionName[0],
-                             link = attractionUrl,
-                             address = attractionAddress[0],
-                             phone = attractionPhone[0],
-                             webpage = attractionWebpage,
-                             tags = attractionNavPath,
-                             type = attractionType,
-                             description = content,
-                             picture = attractionPictureMain,
-                             regionName = attractionRegion[0],
-                             region = regionObject,
-                             destination = attractionDestination[0],
-                             place = attractionPlace[0],
-                             gpsX = gpsX,
-                             gpsY = gpsY,
-                             topResult = isTopResult
-                             )
-
-        newAttr.save()
+        if Attraction.select().where(Attraction.name == attractionName[0], Attraction.regionName == attractionRegion[0]).exists():
+            newAttr = Attraction(name = attractionName[0],
+                                 link = attractionUrl,
+                                 address = attractionAddress[0],
+                                 phone = attractionPhone[0],
+                                 webpage = attractionWebpage,
+                                 tags = attractionNavPath,
+                                 type = attractionType,
+                                 description = content,
+                                 picture = attractionPictureMain,
+                                 regionName = attractionRegion[0],
+                                 region = regionObject,
+                                 destination = attractionDestination[0],
+                                 place = attractionPlace[0],
+                                 gpsX = gpsX,
+                                 gpsY = gpsY,
+                                 topResult = isTopResult
+                                 )
+    
+            newAttr.save()
 
     except Exception as e:
         print('EXCEPTION: ', str(e))
@@ -597,7 +599,8 @@ def townGetData(townUrl, n, numLinks):
 
 
         # saving to DB
-        newTown = Town(name = townName[0],
+        if Town.select().where(Town.name == townName[0], Town.regionName == townRegion[0]).exists():
+            newTown = Town(name = townName[0],
                              link = townUrl,
                              webpage = townWebPage[0],
                              population = townPop,
@@ -620,7 +623,7 @@ def townGetData(townUrl, n, numLinks):
                              topResult = isTopResult
                              )
 
-        newTown.save()
+            newTown.save()
 
     except Exception as e:
         print('EXCEPTION:', str(e))

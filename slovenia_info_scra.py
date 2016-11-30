@@ -39,22 +39,21 @@ def getFromDB(type, id):
 
     # get item from DB based on id and type
 
-    #id = float(id)
     item = None
+    try:
+        if type == 'region':
+            item = Region.get(Region.id == id)
+        elif type == 'town':
+            item = Town.get(Town.id == id)
+        elif type == 'attraction':
+            item = Attraction.get(Attraction.id == id)
 
-    if type == 'region':
-        item = Region.get(Region.id == id)
-    elif type == 'town':
-        item = Town.get(Town.id == id)
-    elif type == 'attraction':
-        item = Attraction.get(Attraction.id == id)
-
-    if item != None:
         item = model_to_dict(item, recurse=False)
         item['timestamp'] = str(item['timestamp'])
         print('Getting item from DB:', item['name'])
-    else:
-        print('No item found!')
+
+    except Exception as e:
+        print('ERROR:', e)
 
     return item
 

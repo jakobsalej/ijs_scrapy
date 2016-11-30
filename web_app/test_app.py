@@ -50,7 +50,7 @@ class QueryAPI(Resource):
         # set a path to correct 'index' dir
         index = open_dir("../index")
         dict = analyzeQuery(index, query)
-        result = json.dumps(dict, ensure_ascii=False, indent=4, sort_keys=True)
+        result = json.dumps(dict, ensure_ascii=False, indent=4, sort_keys=True, separators=(',', ': '))
         print(result)
 
         return result
@@ -59,7 +59,10 @@ class QueryAPI(Resource):
 class ItemAPI(Resource):
     def get(self, type, id):
         item = getFromDB(type, id)
-        result = json.dumps(item, ensure_ascii=False, indent=4, sort_keys=True)
+        if item == None:
+            return {'ERROR': 'No such item!'}, 400
+
+        result = json.dumps(item, ensure_ascii=False, indent=4, sort_keys=True, separators=(',', ': '))
         print(result)
 
         return result

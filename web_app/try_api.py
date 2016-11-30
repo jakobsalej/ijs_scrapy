@@ -1,5 +1,6 @@
 import requests
 import urllib
+import json
 
 
 baseAPIUrl = 'http://127.0.0.1:5000/'
@@ -9,7 +10,7 @@ def testItem(type, id):
 
     fullUrl = baseAPIUrl + 'item/' + type + '/' + str(id)
     response = requests.get(fullUrl)
-    print(response.content)
+    print(response.json())
     return
 
 
@@ -19,14 +20,14 @@ def testQuery(query):
     query = urllib.parse.quote(query)
     fullUrl = baseAPIUrl + 'query/' + query
     response = requests.get(fullUrl)
-    print(response.content)
+    print(response.json())
     return
 
 
 
 # example JSON files
-testItem('region', 3)
-testQuery('seznam gradov pri ljubljani')
+#testItem('region', 3000)
+testQuery('seznam gradov na primorskem')
 
 
 testItemResult = {

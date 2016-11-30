@@ -123,13 +123,13 @@ def searchIndex(index, newText, resultLimit, filterQuery):
         print('Number of hits:', len(results))
 
 
-        # saving hits to the ordered dict, so we can return it (look at this: http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception)
+        # saving hits (only hits with score bigger than 0) to the ordered dict, so we can return it (look at this: http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception)
         dict = collections.OrderedDict()
 
         for i, result in enumerate(results):
             print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
-            dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'score': results.score(i) }
-
+            if float(results.score(i)) > 0:
+                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'score': results.score(i) }
         return dict
 
 
@@ -137,6 +137,12 @@ def searchIndex(index, newText, resultLimit, filterQuery):
 def analyzeQuery(index, query):
 
     print('Original search query:', query)
+
+    # check for empty / non-existent query
+    if not query or query.isspace():
+        print('Query is empty.')
+        return {}
+
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
     resultHit = checkOneHit(index, query)
     if resultHit:
@@ -179,9 +185,10 @@ def analyzeQuery(index, query):
     # get results; if empty, change location filters
     hits = searchIndex(index, text, limit, filterQuery)
     if len(hits) == 0:
-
+        if limit == 1:
+            print('No hits!')
         # more-than-one-result search
-        if limit == 10:
+        elif limit == 10:
             # returns 3 location filter options: place, destination, region; if there are still no results after applaying them, remove location filter completely
             newLocationFilter, fieldOptions = changeLocationFilter(index, correctedLocation, locationFilter)
 
@@ -486,8 +493,8 @@ def selectRegions(regionCount):
 
 # testing search
 #index = open_dir("index")
-#results = analyzeQuery(index, 'gradovi pri ljubljani')        # Ljubljanski grad is not found, because type = 'vredno ogleda' and not 'castle' !! TO-DO: find a solution (vredno ogleda, biseri narave,...)
-#results = analyzeQuery(index, 'seznam jezer na koroškem')
+#results = analyzeQuery(index, 'gradovi pri ljubljani')
+#results = analyzeQuery(index, '')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
@@ -499,12 +506,7 @@ def selectRegions(regionCount):
 #results = analyzeQuery(index, 'seznam jam na krasu')
 
 
-# TO-DO: more than one region when searching for 'primorska', for example!! - DONE
-# TO-DO: if score == 0, dont count - DONE
-# TO-DO: get type from 'vredno ogleda' section!! - DONE
+
 # TO-DO: put search query in singular?
-# TO-DO: REST api, get query, return json
-
 # TO-DO: build database again, check for duplicates
-
 # TO-DO: fix findCorrectLocation method: don't return maxName and so, just a dict

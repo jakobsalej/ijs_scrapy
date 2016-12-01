@@ -298,6 +298,7 @@ def multipleResultsAnalyzer(index, text):
         allowLocation = None                    # location filter
         allowType = None                        # type filter
         isLocation = False
+        isType = False
         for i, word in enumerate(analyzedText):
             
             # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
@@ -338,12 +339,13 @@ def multipleResultsAnalyzer(index, text):
 
 
             # other words - check corrections of 'type' field; once we have location, don't check again (to prevent cases where location is made of more than one word and second word becomes type)
-            elif isLocation == False:
+            elif isLocation == False and isType == False:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
                 correctedName = correctorName.suggest(word, limit=1, prefix=3, maxdist=3)
                 print(word, 'suggestions for type:', correctedType)
                 print(word, 'suggestions for type name:', correctedName)
                 if len(correctedType) > 0:
+                    isType = True
                     analyzedText[i] = correctedType[0]
                     allowType = Term('type', fixFilter(correctedType[0]))
 
@@ -493,7 +495,7 @@ def selectRegions(regionCount):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'gradovi pri ljubljani')
+results = analyzeQuery(index, 'seznam jezer')
 #results = analyzeQuery(index, '')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!

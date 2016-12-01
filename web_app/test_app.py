@@ -39,7 +39,7 @@ def attraction(type=None, id=None):
 
 
 
-# API
+# simple API
 
 api = Api(app)
 

@@ -1,6 +1,5 @@
 import requests
 import urllib
-import json
 
 
 baseAPIUrl = 'http://127.0.0.1:5000/'
@@ -27,7 +26,8 @@ def testQuery(query):
 
 # example JSON files
 testItem('attraction', 300)
-#testQuery('seznam gradov na primorskem')
+testQuery('seznam gradov na primorskem')
+#testQuery('ljubljanski grad')
 
 
 testItemResult = {

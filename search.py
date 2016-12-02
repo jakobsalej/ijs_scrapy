@@ -9,7 +9,8 @@ from slovenia_info_scra import Attraction, Region, Town
 
 
 # list of special words we'd like to detect to show more than one result
-specialWords = ['seznam', 'tabela']     # SLO
+# SLO
+specialWords = ['seznam', 'tabela']
 
 prepositions = ['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven']
 
@@ -293,12 +294,13 @@ def multipleResultsAnalyzer(index, text):
         correctorPlace = s.corrector('place')
         correctorType = s.corrector('type')     # might be better to create a custom word list that has words in singular: jezero, reka, itd..?? (maybe use 'name' field, probably has majority of hits in singular)
         correctorName = s.corrector('name')
-        gotlocation = 0                         # 0 = region, 1 = destination, 2 = place
+        gotlocation = -1                        # 0 = region, 1 = destination, 2 = place
         corrected = None
         allowLocation = None                    # location filter
         allowType = None                        # type filter
         isLocation = False
         isType = False
+        nameSingular = None
         for i, word in enumerate(analyzedText):
             
             # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
@@ -351,7 +353,7 @@ def multipleResultsAnalyzer(index, text):
 
                     # also add things from type 'vredno ogleda' (some items have type 'vredno ogleda', instead of their real type, for example, 'Ljubljanski grad' - instead, we search for 'grad') that have matching name
                     if len(correctedName) > 0:
-                        analyzedText.append(correctedName[0])
+                        nameSingular = correctedName[0]
                         addType = 'vredno'
                         additionalType = Term('type', addType)
                         additionalTypeName = Term('name', correctedName[0])
@@ -361,7 +363,9 @@ def multipleResultsAnalyzer(index, text):
                         # join with regular type filter
                         allowType = Or([allowType, additionalTypeFilter])
 
-
+        # if we find a name in singular, add it to the query list
+        if nameSingular:
+            analyzedText.append(nameSingular)
 
         # turn list back to string
         text = ' '.join(analyzedText)
@@ -495,7 +499,7 @@ def selectRegions(regionCount):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'seznam jezer')
+results = analyzeQuery(index, 'seznam jezer v bližini ljubljane')
 #results = analyzeQuery(index, '')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!

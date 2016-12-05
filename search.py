@@ -129,7 +129,7 @@ def searchIndex(index, newText, resultLimit, filterQuery):
         for i, result in enumerate(results):
             print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
             if float(results.score(i)) > 0:
-                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'score': results.score(i) }
+                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'score': results.score(i) }
         return dict
 
 
@@ -345,7 +345,7 @@ def multipleResultsAnalyzer(index, text):
 
 
             # other words - check corrections of 'type' field; once we have location, don't check again (to prevent cases where location is made of more than one word and second word becomes type)
-            elif isLocation == False and isType == False:
+            elif isType == False:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
                 correctedName = correctorName.suggest(word, limit=1, prefix=3, maxdist=3)
                 print(word, 'suggestions for type:', correctedType)
@@ -503,13 +503,14 @@ def selectRegions(regionCount):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'seznam jezer v ljubljani')
-#results = analyzeQuery(index, '')
+
+# TODO: find a way to distinguish between location and type?
+results = analyzeQuery(index, 'ljubljana reke')
+results = analyzeQuery(index, 'reke ljubljana')
+
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
 
-
-# TODO: put search query in singular?
-# TODO: build database again, check for duplicates
+# TODO: build database again
 # TODO: fix findCorrectLocation method: don't return maxName and so, just a dict

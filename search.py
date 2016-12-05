@@ -24,7 +24,7 @@ attrSchema = Schema(id=ID(stored=True),
                     webpage=ID,
                     tags=KEYWORD(commas=True, scorable=True, lowercase=True, stored=True),
                     type=KEYWORD(stored=True, field_boost=1.2, lowercase=True, scorable=True),
-                    description=TEXT(field_boost=0.01),
+                    description=TEXT(field_boost=0.01, stored=True),
                     picture=ID,
                     regionName=TEXT(stored=True),
                     regionID=ID,
@@ -308,7 +308,7 @@ def multipleResultsAnalyzer(index, text):
         for i, word in enumerate(analyzedText):
 
             # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
-            if i > locationIndex and isLocation == False:
+            if i >= locationIndex and isLocation == False:
                 correctedRegion = correctorRegion.suggest(word, limit=1, prefix=2)
                 correctedDestination = correctorDestination.suggest(word, limit=1, prefix=2)
                 correctedPlace = correctorPlace.suggest(word, limit=1, prefix=2)
@@ -503,7 +503,7 @@ def selectRegions(regionCount):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'seznam jezer v ljubljane')
+results = analyzeQuery(index, 'seznam jezer v ljubljani')
 #results = analyzeQuery(index, '')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!

@@ -281,10 +281,14 @@ def multipleResultsAnalyzer(index, text):
     # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take index of the last one
     locationIndex = -1
     for i, token in enumerate(sa(text, removestops=False)):
+        print(token)
         if token.stopped == True:
-            locationIndex = i
+            if locationIndex == -1:
+                locationIndex = i
         else:
             analyzedText.append(token.text)
+
+    print(analyzedText)
 
     # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
 
@@ -302,10 +306,9 @@ def multipleResultsAnalyzer(index, text):
         isType = False
         nameSingular = None
         for i, word in enumerate(analyzedText):
-            
+
             # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
-            if i == locationIndex:
-                isLocation = True
+            if i > locationIndex and isLocation == False:
                 correctedRegion = correctorRegion.suggest(word, limit=1, prefix=2)
                 correctedDestination = correctorDestination.suggest(word, limit=1, prefix=2)
                 correctedPlace = correctorPlace.suggest(word, limit=1, prefix=2)
@@ -335,6 +338,7 @@ def multipleResultsAnalyzer(index, text):
 
                 # change location word in query (except when we find location by searching for region) and set filter
                 if replaceLocationQuery and corrected:
+                    isLocation = True
                     analyzedText[i] = corrected
                     allowLocation = Term(locationField, fixFilter(corrected))
 
@@ -499,13 +503,13 @@ def selectRegions(regionCount):
 
 # testing search
 index = open_dir("index")
-results = analyzeQuery(index, 'seznam jezer v bližini ljubljane')
+results = analyzeQuery(index, 'seznam jezer v ljubljane')
 #results = analyzeQuery(index, '')
 #results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
 #results = analyzeQuery(index, 'reke v notranjskem')   #!!!
 
 
 
-# TO-DO: put search query in singular?
-# TO-DO: build database again, check for duplicates
-# TO-DO: fix findCorrectLocation method: don't return maxName and so, just a dict
+# TODO: put search query in singular?
+# TODO: build database again, check for duplicates
+# TODO: fix findCorrectLocation method: don't return maxName and so, just a dict

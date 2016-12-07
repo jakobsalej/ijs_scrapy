@@ -1,5 +1,6 @@
 import os
 import collections
+
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import MultifieldParser, OrGroup, QueryParser
@@ -8,10 +9,12 @@ from whoosh.query import *
 from slovenia_info_scra import Attraction, Region, Town
 
 
+# this only works for user queries in slovenian language
+
 # list of special words we'd like to detect to show more than one result
+
 # SLO
 specialWords = ['seznam', 'tabela']
-
 prepositions = ['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven']
 
 
@@ -98,8 +101,8 @@ def init():
             description=region.description,
             picture=region.picture,
             regionName=region.name,    # just for displaying results, doesn't matter
-            destination=region.name,
-            place=region.name,
+            destination='',
+            place='',
             type='region',
             typeID='region'
         )
@@ -126,10 +129,16 @@ def searchIndex(index, newText, resultLimit, filterQuery):
         # saving hits (only hits with score bigger than 0) to the ordered dict, so we can return it (look at this: http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception)
         dict = collections.OrderedDict()
 
+        hasResult = False
         for i, result in enumerate(results):
-            print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
             if float(results.score(i)) > 0:
+                hasResult = True
+                print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
                 dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'score': results.score(i) }
+
+        if hasResult == False:
+            print('___ NO RESULTS ___')
+
         return dict
 
 
@@ -146,11 +155,12 @@ def analyzeQuery(index, query):
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
     resultHit = checkOneHit(index, query)
     if resultHit:
-        print('------------------------------------------------------------------------------------------------------------------------------\n\n\n')
+        print('-------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
 
     # if there was no exact hit (query == name of first result), we try to do some smart things
-    # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
+    # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter
+    # (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
     sa = StandardAnalyzer(stoplist=specialWords)
     print('Special words: ', [(token.text, token.stopped) for token in sa(query, removestops=False)])
 
@@ -160,7 +170,8 @@ def analyzeQuery(index, query):
     with index.searcher() as s:
         correctorType = s.corrector('type')
         for token in sa(query, removestops=False):
-            # len(token.test) > 1 is needed as Whoosh automatically removes all words that are only one letter long - but we need them as prepositions (s, z, v)
+            # len(token.test) > 1 is needed as Whoosh automatically removes all words that are only one letter long,
+            # but we need them as prepositions (s, z, v)
             if token.stopped == True and len(token.text) > 1:
                 limit = 10
             # len(token.text) > 2 is needed, otherwise type matches words like 'na'
@@ -174,7 +185,8 @@ def analyzeQuery(index, query):
     # turn list back to string
     text = ' '.join(newQuery)
 
-    # if limit = 10, we want to make search a bit more general because a stopword/plural was detected, since we need more results based on type, not name (probably)
+    # if limit = 10, we want to make search a bit more general because a stopword/plural was detected, since we need
+    # more results based on type, not name (probably)
     filterQuery = None
     if limit == 10:
         text, gotLocation, locationFilter, typeFilter, correctedLocation = multipleResultsAnalyzer(index, text)
@@ -189,7 +201,8 @@ def analyzeQuery(index, query):
             print('No hits!')
         # more-than-one-result search
         elif limit == 10:
-            # returns 3 location filter options: place, destination, region; if there are still no results after applaying them, remove location filter completely
+            # returns 3 location filter options: place, destination, region; if there are still no results
+            # after applying them, remove location filter completely
             newLocationFilter, fieldOptions = changeLocationFilter(index, correctedLocation, locationFilter)
 
             while len(hits) == 0 and gotLocation > -1:
@@ -205,7 +218,8 @@ def analyzeQuery(index, query):
 
                 gotLocation -= 1
 
-    print('------------------------------------------------------------------------------------------------------------------------------\n\n\n')
+    print('-------------------------------------------------------------------------------------------------')
+    print('-------------------------------------------------------------------------------------------------\n\n\n\n\n')
     return hits
 
 
@@ -278,10 +292,11 @@ def multipleResultsAnalyzer(index, text):
     sa = StandardAnalyzer(stoplist=prepositions)
     analyzedText = []
     
-    # here we save an index of a word that's probably a location (we assume location follows a preposition: "arhitektura na gorenjskem"); in case there is more than one preposition, we take index of the last one
+    # here we save an index of a word that's probably a location
+    # (we assume location follows a preposition: "arhitektura na gorenjskem");
+    # in case there is more than one preposition, we take index of the last one
     locationIndex = -1
     for i, token in enumerate(sa(text, removestops=False)):
-        print(token)
         if token.stopped == True:
             if locationIndex == -1:
                 locationIndex = i
@@ -290,72 +305,59 @@ def multipleResultsAnalyzer(index, text):
 
     print(analyzedText)
 
-    # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
+    # as we try to turn words in a more 'general' form, we look in the regionName and tags fields for
+    # potential 'corrections' of our words in query, using "Did you mean..." method from Whoosh
 
     with index.searcher() as s:
-        correctorRegion = s.corrector('regionName')
-        correctorDestination = s.corrector('destination')
-        correctorPlace = s.corrector('place')
-        correctorType = s.corrector('type')     # might be better to create a custom word list that has words in singular: jezero, reka, itd..?? (maybe use 'name' field, probably has majority of hits in singular)
+        correctorType = s.corrector('type')
         correctorName = s.corrector('name')
         gotlocation = -1                        # 0 = region, 1 = destination, 2 = place
-        corrected = None
         allowLocation = None                    # location filter
         allowType = None                        # type filter
         isLocation = False
         isType = False
         nameSingular = None
-        for i, word in enumerate(analyzedText):
+        addToQuery = None
+        correctedLocation = None
 
-            # look for index of a "location word", then check if it matches any region / destination / Town; if it doesn't, try to figure it out
-            if i >= locationIndex and isLocation == False:
-                correctedRegion = correctorRegion.suggest(word, limit=1, prefix=2)
-                correctedDestination = correctorDestination.suggest(word, limit=1, prefix=2)
-                correctedPlace = correctorPlace.suggest(word, limit=1, prefix=2)
-                print(word, ', suggestions for location:', correctedRegion, correctedDestination, correctedPlace)
+        for j, word in enumerate(analyzedText):
+            if j == locationIndex:
+                fullLocation = ' '.join(analyzedText[j:len(analyzedText)])
 
-                # if there is a hit, replace original word with a corrected version (or should we remove it, or not correct it at all??)
-                replaceLocationQuery = True
-                if len(correctedRegion) > 0:
-                    gotlocation = 0
-                    corrected = correctedRegion[0]  # split?
-                    locationField = 'regionName'
-                elif len(correctedDestination) > 0:
-                    gotlocation = 1
-                    corrected = correctedDestination[0]
-                    locationField = 'destination'
-                elif len(correctedPlace) > 0:
-                    gotlocation = 2
-                    corrected = correctedPlace[0]
-                    locationField = 'place'
-                else:
-                    # in case of no match with region, destination or place
-                    corrected, selectedRegions = findCorrectLocation(index, word)
+                locationList = ['regionName', 'destination', 'place']
+                for i, location in enumerate(locationList):
+                    qp = QueryParser(location, schema=index.schema)
+                    qLocation = qp.parse(fullLocation)
+                    corrected = s.correct_query(qLocation, fullLocation, prefix=2, maxdist=2)
+                    if corrected.query != qLocation:
+                        analyzedText[j:len(analyzedText)] = corrected.string.split()    # replace location in query with corrected version
+                        allowLocation = corrected.query                                 # set location filter, starting from broader to smaller (region -> place)
+                        locationField = location                                        # save selected location field
+                        gotlocation = i                                                 # save corresponding location field index
+                        correctedLocation = corrected.string                            # save corrected name
+
+                if not allowLocation:
+                    # in case of no match with region, destination or place, do a look up for region
+                    selectedRegions = findCorrectLocation(index, word)
                     gotlocation = 0
                     locationField = 'regionName'
                     allowLocation = joinTerms(locationField, selectedRegions)
-                    replaceLocationQuery = False
-
-                # change location word in query (except when we find location by searching for region) and set filter
-                if replaceLocationQuery and corrected:
-                    isLocation = True
-                    analyzedText[i] = corrected
-                    allowLocation = Term(locationField, fixFilter(corrected))
 
 
-
-            # other words - check corrections of 'type' field; once we have location, don't check again (to prevent cases where location is made of more than one word and second word becomes type)
-            elif isType == False:
+            # other words - check corrections of 'type' field
+            elif isType is False and len(word) > 1:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
-                correctedName = correctorName.suggest(word, limit=1, prefix=3, maxdist=3)
+                correctedName = correctorName.suggest(word, limit=1, prefix=2, maxdist=3)
                 print(word, 'suggestions for type:', correctedType)
                 print(word, 'suggestions for type name:', correctedName)
                 if len(correctedType) > 0:
                     isType = True
-                    analyzedText[i] = correctedType[0]
+                    analyzedText[j] = correctedType[0]
                     allowType = Term('type', fixFilter(correctedType[0]))
 
-                    # also add things from type 'vredno ogleda' (some items have type 'vredno ogleda', instead of their real type, for example, 'Ljubljanski grad' - instead, we search for 'grad') that have matching name
+                    # also add things from type 'vredno ogleda' that have matching name
+                    # (some items have type 'vredno ogleda', instead of their real type,
+                    # for example, 'Ljubljanski grad' - instead, we search for 'grad')
                     if len(correctedName) > 0:
                         nameSingular = correctedName[0]
                         addType = 'vredno'
@@ -367,6 +369,7 @@ def multipleResultsAnalyzer(index, text):
                         # join with regular type filter
                         allowType = Or([allowType, additionalTypeFilter])
 
+
         # if we find a name in singular, add it to the query list
         if nameSingular:
             analyzedText.append(nameSingular)
@@ -374,7 +377,7 @@ def multipleResultsAnalyzer(index, text):
         # turn list back to string
         text = ' '.join(analyzedText)
 
-        return text, gotlocation, allowLocation, allowType, corrected
+        return text, gotlocation, allowLocation, allowType, correctedLocation
 
 
 
@@ -397,7 +400,8 @@ def joinTerms(type, list):
 
 def fixFilter(string):
 
-    # ugly fix: take only the first word of filter and LOWERCASE it! - it doesn't work because filter is made of more than one word???
+    # ugly fix: take only the first word of filter and LOWERCASE it!
+    # TODO: fix that ugly fix with correct use of terms
     stringSplit = string.split()
     fixed = stringSplit[0].lower()
 
@@ -427,28 +431,28 @@ def joinFilters(filter1, filter2):
 
 def findCorrectLocation(index, word):
 
-    # search for word that is supposed to be a location (and does not match neither region, destination or place), determine region based on Region of most hits for a given word
+    # search for word that is supposed to be a location (and does not match neither region, destination or place),
+    # determine region based on Region of most hits for a given word
+    print('-----------------------------\nSELECTING REGIONS:\n')
+
     numOfResults = 50
     results = searchIndex(index, word, numOfResults, None)
-
     placesRegion = dict()
-    max = 0
-    maxName = None
 
     for i, key in enumerate(results):
         if results[key]['score'] > 0:
             resultRegion = results[key]['regionName']
-            placesRegion, max, maxName = countRegion(placesRegion, resultRegion, max, maxName)
+            placesRegion = countRegion(placesRegion, resultRegion)
 
-    print('Region suggestion:', maxName)
     print(placesRegion)
     selectedRegions = selectRegions(placesRegion)
+    print('------------------------------\n')
 
-    return maxName, selectedRegions
+    return selectedRegions
 
 
 
-def countRegion(placesRegion, result, max, maxName):
+def countRegion(placesRegion, result):
 
     # just a helper method for 'findCorrectLocation'
     # if region already in 'placesRegion' increase count by 1, else add it to dict
@@ -456,19 +460,13 @@ def countRegion(placesRegion, result, max, maxName):
     exists = False
     for key in placesRegion:
         if key == result:
-            placesRegion[key]['count'] +=1
+            placesRegion[key]['count'] += 1
             exists = True
-            if placesRegion[key]['count'] > max:
-                max = placesRegion[key]['count']
-                maxName = key
 
     if exists == False:
         placesRegion[result] = {'count': 1}
-        if placesRegion[result]['count'] > max:
-            max = placesRegion[result]['count']
-            maxName = result
 
-    return placesRegion, max, maxName
+    return placesRegion
 
 
 
@@ -498,6 +496,8 @@ def selectRegions(regionCount):
 
 
 
+
+
 # only run once, to build index
 #init()
 
@@ -505,12 +505,12 @@ def selectRegions(regionCount):
 index = open_dir("index")
 
 # TODO: find a way to distinguish between location and type?
-results = analyzeQuery(index, 'ljubljana reke')
-results = analyzeQuery(index, 'reke ljubljana')
+#results = analyzeQuery(index, 'ljubljana reke')
+results = analyzeQuery(index, 'reke ljubljana')     # TODO: improve this query!
 
-#results = analyzeQuery(index, 'reke pri ljubljani') #!!!!
-#results = analyzeQuery(index, 'reke v notranjskem')   #!!!
+#results = analyzeQuery(index, 'seznam gradov pri novem mestu') #!!!!
+#results = analyzeQuery(index, 'reke na primorskem')   #!!!
 
 
 # TODO: build database again
-# TODO: fix findCorrectLocation method: don't return maxName and so, just a dict
+# TODO. maybe add dynamic prefix to improve search results? (in places where we only look for variations of words)

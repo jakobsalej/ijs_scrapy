@@ -332,8 +332,7 @@ def multipleResultsAnalyzer(index, text):
                     if corrected.query != qLocation:
                         analyzedText[j:len(analyzedText)] = corrected.string.split()    # replace location in query with corrected version
                         allowLocation = corrected.query                                 # set location filter, starting from broader to smaller (region -> place)
-                        locationField = location                                        # save selected location field
-                        gotlocation = i                                                 # save corresponding location field index
+                        gotlocation = i                                                 # save location field index
                         correctedLocation = corrected.string                            # save corrected name
 
                 if not allowLocation:

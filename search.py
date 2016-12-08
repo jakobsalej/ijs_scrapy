@@ -12,7 +12,6 @@ from slovenia_info_scra import Attraction, Region, Town
 # this only works for user queries in slovenian language
 
 # list of special words we'd like to detect to show more than one result
-
 # SLO
 specialWords = ['seznam', 'tabela']
 prepositions = ['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven']
@@ -119,14 +118,16 @@ def searchIndex(index, newText, resultLimit, filterQuery):
     with index.searcher() as searcher:
         # using MultifieldParser to search all relevant fields
 
-        # in case of multiple words in query, use OR (query: 'lake bled' => 'lake' OR 'bled'), but boost score of items that contain both tokens
+        # in case of multiple words in query, use OR (query: 'lake bled' => 'lake' OR 'bled')
+        # boost score of items that contain both tokens
         orGroup = OrGroup.factory(0.9)
         query = MultifieldParser(["name", "type", "regionName", "description", "tags", "topResult", "destination", "place"], index.schema, group=orGroup).parse(newText)
         results = searcher.search(query, limit=resultLimit, terms=True, filter=filterQuery)
         print('Number of hits:', len(results))
 
 
-        # saving hits (only hits with score bigger than 0) to the ordered dict, so we can return it (look at this: http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception)
+        # saving hits (only hits with score bigger than 0) to the ordered dict, so we can return it
+        # http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception
         dict = collections.OrderedDict()
 
         hasResult = False
@@ -134,7 +135,7 @@ def searchIndex(index, newText, resultLimit, filterQuery):
             if float(results.score(i)) > 0:
                 hasResult = True
                 print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
-                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'score': results.score(i) }
+                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
 
         if hasResult == False:
             print('___ NO RESULTS ___')
@@ -153,8 +154,10 @@ def analyzeQuery(index, query):
         return {}
 
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
-    resultHit = checkOneHit(index, query)
-    if resultHit:
+    # if there is, return it immediately
+    # if its not exact hit (word for word in title), save it for later
+    resultHit, exactHit = checkOneHit(index, query)
+    if exactHit:
         print('-------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
 
@@ -191,6 +194,11 @@ def analyzeQuery(index, query):
     if limit == 10:
         text, gotLocation, locationFilter, typeFilter, correctedLocation = multipleResultsAnalyzer(index, text)
         filterQuery = joinFilters(typeFilter, locationFilter)
+    else:
+        # since we now know user wants just one hit, we can return the one we saved earlier, from 'checkOneHit' method
+        print(resultHit)
+        print('---------------------------------------------------------------------------------------------\n\n\n\n\n')
+        return resultHit
 
     print('New user query after analysis:', text)
 
@@ -226,7 +234,8 @@ def analyzeQuery(index, query):
 
 def changeLocationFilter(index, correctedLocation, locationFilter):
 
-    # based on locationFilter, get other fields (if available): region, destination, place (we have one already from the filter and we use that one for search)
+    # based on locationFilter, get other fields (if available): region, destination, place
+    # (we have one already from the filter and we use that one for search)
     # locationOptions = [region, destination, place]
     locationOptions = [None, None, None]
     fieldOptions = ['regionName', 'destination', 'place']
@@ -252,25 +261,35 @@ def checkOneHit(index, query):
     sa = StandardAnalyzer(stoplist=None)
     parser = QueryParser("name", schema=index.schema)
     newQuery = []
+    exactHit = False
 
+    # did we change user query? (corrected typos...)
+    suggestion = False
+    suggestionText = None
+
+    # check for typos
     with index.searcher() as s:
-        correctorName = s.corrector('name')
         for token in sa(query):
-            #correctedName1 = correctorName.suggest(token.text, limit=1, prefix=2, maxdist=0)
-            #correctedName2 = correctorName.suggest(token.text, limit=1, prefix=2, maxdist=1)
-            #if len(correctedName1):
-            #    print('Name suggestion 1:', correctedName1[0])
-            #elif len(correctedName2):
-            #    print('Name suggestion 2:', correctedName2[0])
             newQuery.append(token.text)
 
-    newQuery = ' '.join(newQuery)
-    newQueryPhrase = '"' + newQuery + '"'
-    filterName = parser.parse(newQueryPhrase)
-    hit = searchIndex(index, query, 1, filterName)
+        newQuery = ' '.join(newQuery)
+        filterName = parser.parse(newQuery)
+        correctedName = s.correct_query(filterName, newQuery, prefix=2, maxdist=2)
+        if correctedName.query != filterName:
+            filterName = correctedName.query
+            newQuery = correctedName.string
+            suggestion = True       # correcting user typos!
+            suggestionText = newQuery
 
-    # check again if name is exactly the same as search query; first we have to lowercase all words; if there is a match, just return ONE result and done!
+    print(filterName)
+    hit = searchIndex(index, newQuery, 1, filterName)
+
+    # check again if name is exactly the same as search query; first we have to lowercase all words
     for key in hit:
+        # if field 'suggestion' is TRUE, user should be asked "Did you mean [suggestionText]?"
+        hit[key]['suggestion'] = suggestion
+        hit[key]['suggestionText'] = suggestionText
+
         hitName = []
         for token in sa(hit[key]['name']):
             hitName.append(token.text)
@@ -278,9 +297,9 @@ def checkOneHit(index, query):
         print('Comparing names:', newQuery, hitName)
         if hitName == newQuery:
             print('EXACT MATCH!!')
-            return hit
+            exactHit = True
 
-    return None
+    return hit, exactHit
 
 
 
@@ -319,6 +338,12 @@ def multipleResultsAnalyzer(index, text):
         nameSingular = None
         addToQuery = None
         correctedLocation = None
+
+        # no preposition means no info on what is type and what is location
+        if locationIndex == -1:
+            print('No locatin index!')
+            # TODO: improve detection of location / type
+
 
         for j, word in enumerate(analyzedText):
             if j == locationIndex:
@@ -504,8 +529,10 @@ def selectRegions(regionCount):
 index = open_dir("index")
 
 # TODO: find a way to distinguish between location and type?
-#results = analyzeQuery(index, 'ljubljana reke')
-results = analyzeQuery(index, 'reke ljubljana')     # TODO: improve this query!
+#results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
+#results = analyzeQuery(index, 'reke ljubljana')     # TODO: improve this query!
+results = analyzeQuery(index, 'lovrenška jezera')
+results = analyzeQuery(index, 'grat')
 
 #results = analyzeQuery(index, 'seznam gradov pri novem mestu') #!!!!
 #results = analyzeQuery(index, 'reke na primorskem')   #!!!

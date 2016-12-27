@@ -1,3 +1,7 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+
 import os
 import collections
 
@@ -526,13 +530,13 @@ def selectRegions(regionCount):
 #init()
 
 # testing search
-index = open_dir("index")
+#index = open_dir("index")
 
 # TODO: find a way to distinguish between location and type?
 #results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
 #results = analyzeQuery(index, 'reke ljubljana')     # TODO: improve this query!
-results = analyzeQuery(index, 'lovrenška jezera')
-results = analyzeQuery(index, 'grat')
+#results = analyzeQuery(index, 'lovrenška jezera')
+#results = analyzeQuery(index, 'grat')
 
 #results = analyzeQuery(index, 'seznam gradov pri novem mestu') #!!!!
 #results = analyzeQuery(index, 'reke na primorskem')   #!!!

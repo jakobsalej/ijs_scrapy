@@ -53,7 +53,10 @@ class QueryAPI(Resource):
         result = json.dumps(dict, ensure_ascii=False, indent=4, sort_keys=True, separators=(',', ': '))
         print(result)
 
-        return result
+        # turning json-like string into actual object?
+        resJson = json.loads(result)
+
+        return resJson
 
 
 class ItemAPI(Resource):
@@ -65,7 +68,10 @@ class ItemAPI(Resource):
         result = json.dumps(item, ensure_ascii=False, indent=4, sort_keys=True, separators=(',', ': '))
         print(result)
 
-        return result
+        # turning json-like string into actual object?
+        resJson = json.loads(result)
+
+        return resJson
 
 
 api.add_resource(QueryAPI, '/query/<string:query>', endpoint = 'query')

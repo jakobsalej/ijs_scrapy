@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 import os
 import collections
+import re
 
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
@@ -116,7 +116,59 @@ def init():
 
 
 
-def searchIndex(index, newText, resultLimit, filterQuery):
+def findMatch(index, query):
+
+    # using whole query we try to find requested town/region/attraction in query
+
+    # TODO: variations of words
+    newQueryList = processText(query, mode=1)
+    newQuery = processText(query, mode=2)
+    print(newQuery)
+
+    # search
+    results = searchIndex(index, newQuery, 5)
+    isExactMatch = False
+    result = None
+    if len(results) > 0:
+        result = results[0]
+
+        # remove matching words from original query by using hit's name as stoplist
+        nameList = processText(results[0]['name'])
+        otherWords = processText(newQuery, nameList)
+        print(otherWords)
+
+        # also check the other way around and if list is empty, we have exact match
+        if len(processText(results[0]['name'], newQueryList)) == 0:
+            isExactMatch = True
+
+    # TODO: something smart with "other words"
+    return result, isExactMatch
+
+
+
+
+
+def processText(str, stopWords=None, mode=1):
+
+    # returns cleaned up text; if mode == 1, return list; if mode == 2, return string
+    # TODO: odstrani sumnike, vendar ne pred iskanjem?
+
+    # remove special characters
+    str = re.sub('[^a-zA-Z0-9 \n\.]', '', str)
+
+    # next we use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter
+    # (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
+    sa = StandardAnalyzer(stoplist=stopWords)
+    strList = [token.text for token in sa(str)]
+
+    if mode == 1:
+        return strList
+    elif mode == 2:
+        return ' '.join(strList)
+
+
+
+def searchIndex(index, newText, resultLimit=1, filterQuery=None):
 
     # search for a given string
     with index.searcher() as searcher:
@@ -130,13 +182,12 @@ def searchIndex(index, newText, resultLimit, filterQuery):
         print('Number of hits:', len(results))
 
 
-        # saving hits (only hits with score bigger than 0) to the ordered dict, so we can return it
-        # http://stackoverflow.com/questions/19477319/whoosh-accessing-search-page-result-items-throws-readerclosed-exception
+        # saving hits (only hits with score bigger than 0.5 - topResult value) to the ordered dict, so we can return it
         dict = collections.OrderedDict()
 
         hasResult = False
         for i, result in enumerate(results):
-            if float(results.score(i)) > 0:
+            if float(results.score(i)) > 0.5:
                 hasResult = True
                 print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
                 dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
@@ -152,10 +203,18 @@ def analyzeQuery(index, query):
 
     print('Original search query:', query)
 
+    # TODO: odstrani šumnike?
+
     # check for empty / non-existent query
     if not query or query.isspace():
         print('Query is empty.')
         return {}
+
+    # find a match
+    result, exactHit = findMatch(index, query)
+    if exactHit:
+        print('Found a match! \n------------------------\n', result['name'], result['regionName'], result['score'])
+        return result
 
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
     # if there is, return it immediately
@@ -530,7 +589,7 @@ def selectRegions(regionCount):
 #init()
 
 # testing search
-#index = open_dir("index")
+index = open_dir("index")
 
 # TODO: find a way to distinguish between location and type?
 #results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
@@ -538,8 +597,8 @@ def selectRegions(regionCount):
 #results = analyzeQuery(index, 'lovrenška jezera')
 #results = analyzeQuery(index, 'grat')
 
-#results = analyzeQuery(index, 'seznam gradov pri novem mestu') #!!!!
-#results = analyzeQuery(index, 'reke na primorskem')   #!!!
+results = analyzeQuery(index, 'ljubljanski gard') #!!!!
+results = analyzeQuery(index, 'ljubljna')   #!!!
 
 
 # TODO: build database again

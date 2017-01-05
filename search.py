@@ -3,13 +3,14 @@
 
 import os
 import collections
-import re
+import pickle
 
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
 from whoosh.qparser import MultifieldParser, OrGroup, QueryParser
 from whoosh.analysis import *
 from whoosh.query import *
+from whoosh.spelling import ListCorrector
 from slovenia_info_scra import Attraction, Region, Town
 
 
@@ -115,37 +116,41 @@ def init():
     return
 
 
-
 def findMatch(index, query):
 
     # using whole query we try to find requested town/region/attraction in query
 
-    # TODO: variations of words
     newQueryList = processText(query, mode=1)
-    newQuery = processText(query, mode=2)
-    print(newQuery)
+    newQueryList = getLocationSuggestion(newQueryList)
+    newQueryList = getLocationSuggestion(newQueryList, prefix=1)
+    processedQuery = ' '.join(newQueryList)
 
     # search
-    results = searchIndex(index, newQuery, 5)
+    results = searchIndex(index, processedQuery, 5)
     isExactMatch = False
     result = None
+    otherWords = None
     if len(results) > 0:
+
+        # let's take a look at first result
         result = results[0]
+        name = result['name']
+        place = result['place']
+        destination = result['destination']
+        # TODO: something with that
 
         # remove matching words from original query by using hit's name as stoplist
         nameList = processText(results[0]['name'])
-        otherWords = processText(newQuery, nameList)
+        otherWords = processText(processedQuery, nameList)
         print(otherWords)
 
-        # also check the other way around and if list is empty, we have exact match
-        if len(processText(results[0]['name'], newQueryList)) == 0:
+        # check for exact match by comparing strings
+        print(nameList, newQueryList)
+        if ' '.join(nameList) == ' '.join(newQueryList):
             isExactMatch = True
 
     # TODO: something smart with "other words"
-    return result, isExactMatch
-
-
-
+    return result, otherWords, isExactMatch
 
 
 def processText(str, stopWords=None, mode=1):
@@ -166,6 +171,58 @@ def processText(str, stopWords=None, mode=1):
     elif mode == 2:
         return ' '.join(strList)
 
+
+def calculatePrefix(word):
+
+    # this is not meant for correcting user mistakes, but for stemming variations of words
+
+    # default
+    variationLength = 3
+
+    wordLen = len(word)
+    if wordLen == 0:
+        prefix = 0
+    elif wordLen < 4:
+        prefix = wordLen - 1
+    elif wordLen < 6:
+        prefix = wordLen - 2
+    else:
+        prefix = wordLen - variationLength
+
+    return prefix
+
+
+def getSuggestionQuery(index, query, field):
+
+    # returns new suggested query
+
+    qp = QueryParser(field, schema=index.schema)
+    parsedQuery = qp.parse(query)
+    with index.searcher() as s:
+        corrected = s.correct_query(parsedQuery, query, prefix=2, maxdist=3)
+        print('Suggestion for query:', corrected.string)
+
+    return corrected.string
+
+
+def getLocationSuggestion(queryList, prefix=-1):
+
+    # firs we look for suggestions on the list of all slovenian towns
+    # if there is a match, we swap it with original word
+
+    correctorList = ListCorrector(townsStatic)
+    for i, word in enumerate(queryList):
+        if len(word) > 2:
+            if prefix == -1:
+                corrected = correctorList.suggest(word, limit=1, prefix=calculatePrefix(word), maxdist=2)
+            else:
+                corrected = correctorList.suggest(word, limit=1, prefix=prefix, maxdist=2)
+
+            if len(corrected) > 0:
+                print('Swapping words from list:', queryList[i], corrected[0])
+                queryList[i] = corrected[0]
+
+    return queryList
 
 
 def searchIndex(index, newText, resultLimit=1, filterQuery=None):
@@ -189,14 +246,13 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
         for i, result in enumerate(results):
             if float(results.score(i)) > 0.5:
                 hasResult = True
-                print(result, 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
+                print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
                 dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
 
         if hasResult == False:
             print('___ NO RESULTS ___')
 
         return dict
-
 
 
 def analyzeQuery(index, query):
@@ -211,7 +267,7 @@ def analyzeQuery(index, query):
         return {}
 
     # find a match
-    result, exactHit = findMatch(index, query)
+    result, otherWords, exactHit = findMatch(index, query)
     if exactHit:
         print('Found a match! \n------------------------\n', result['name'], result['regionName'], result['score'])
         return result
@@ -591,13 +647,23 @@ def selectRegions(regionCount):
 # testing search
 index = open_dir("index")
 
+# get slovenian towns from file
+with open('kraji_slovenija', 'rb') as fp:
+    townsStatic = pickle.load(fp)
+
+
+
+
 # TODO: find a way to distinguish between location and type?
 #results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
 #results = analyzeQuery(index, 'reke ljubljana')     # TODO: improve this query!
 #results = analyzeQuery(index, 'lovrenška jezera')
 #results = analyzeQuery(index, 'grat')
 
-results = analyzeQuery(index, 'ljubljanski gard') #!!!!
+results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
+results = analyzeQuery(index, 'povej mi kaj o bledu')
+results = analyzeQuery(index, 'novo mesjto')
+
 results = analyzeQuery(index, 'ljubljna')   #!!!
 
 

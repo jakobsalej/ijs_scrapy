@@ -122,7 +122,6 @@ def findMatch(index, query):
 
     newQueryList = processText(query, mode=1)
     newQueryList = getLocationSuggestion(newQueryList)
-    newQueryList = getLocationSuggestion(newQueryList, prefix=1)
     processedQuery = ' '.join(newQueryList)
 
     # search
@@ -141,7 +140,7 @@ def findMatch(index, query):
 
         # remove matching words from original query by using hit's name as stoplist
         nameList = processText(results[0]['name'])
-        otherWords = processText(processedQuery, nameList)
+        remainingWords = processText(processedQuery, nameList)
         print(otherWords)
 
         # check for exact match by comparing strings
@@ -150,7 +149,7 @@ def findMatch(index, query):
             isExactMatch = True
 
     # TODO: something smart with "other words"
-    return result, otherWords, isExactMatch
+    return result, remainingWords, isExactMatch
 
 
 def processText(str, stopWords=None, mode=1):
@@ -263,22 +262,20 @@ def analyzeQuery(index, query):
 
     # check for empty / non-existent query
     if not query or query.isspace():
-        print('Query is empty.')
+        print('RETURNING: Query is empty.')
         return {}
-
-    # find a match
-    result, otherWords, exactHit = findMatch(index, query)
-    if exactHit:
-        print('Found a match! \n------------------------\n', result['name'], result['regionName'], result['score'])
-        return result
 
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
     # if there is, return it immediately
     # if its not exact hit (word for word in title), save it for later
     resultHit, exactHit = checkOneHit(index, query)
     if exactHit:
+        print('RETURNING:', resultHit)
         print('-------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
+
+    # find a location match (from a list with all slovenian towns)
+    resultHit, remainingWords, exactHit = findMatch(index, query)
 
     # if there was no exact hit (query == name of first result), we try to do some smart things
     # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter
@@ -297,7 +294,7 @@ def analyzeQuery(index, query):
             if token.stopped == True and len(token.text) > 1:
                 limit = 10
             # len(token.text) > 2 is needed, otherwise type matches words like 'na'
-            elif len(token.text) > 2 and len(correctorType.suggest(token.text, limit=1, maxdist=0, prefix=2)) > 0:
+            elif len(token.text) > 2 and len(correctorType.suggest(token.text, limit=1, maxdist=0, prefix=calculatePrefix(token.text))) > 0:
                 print('Found type in plural, set limit to 10!:', token.text)
                 limit = 10
                 newQuery.append(token.text)
@@ -315,7 +312,7 @@ def analyzeQuery(index, query):
         filterQuery = joinFilters(typeFilter, locationFilter)
     else:
         # since we now know user wants just one hit, we can return the one we saved earlier, from 'checkOneHit' method
-        print(resultHit)
+        print('RETURNING:', resultHit)
         print('---------------------------------------------------------------------------------------------\n\n\n\n\n')
         return resultHit
 
@@ -345,6 +342,7 @@ def analyzeQuery(index, query):
 
                 gotLocation -= 1
 
+    print('RETURNING:', hits)
     print('-------------------------------------------------------------------------------------------------')
     print('-------------------------------------------------------------------------------------------------\n\n\n\n\n')
     return hits
@@ -460,19 +458,20 @@ def multipleResultsAnalyzer(index, text):
 
         # no preposition means no info on what is type and what is location
         if locationIndex == -1:
-            print('No locatin index!')
+            print('No location index!')
             # TODO: improve detection of location / type
 
 
         for j, word in enumerate(analyzedText):
             if j == locationIndex:
                 fullLocation = ' '.join(analyzedText[j:len(analyzedText)])
-
                 locationList = ['regionName', 'destination', 'place']
+
                 for i, location in enumerate(locationList):
                     qp = QueryParser(location, schema=index.schema)
                     qLocation = qp.parse(fullLocation)
                     corrected = s.correct_query(qLocation, fullLocation, prefix=2, maxdist=2)
+
                     if corrected.query != qLocation:
                         analyzedText[j:len(analyzedText)] = corrected.string.split()    # replace location in query with corrected version
                         allowLocation = corrected.query                                 # set location filter, starting from broader to smaller (region -> place)
@@ -493,24 +492,31 @@ def multipleResultsAnalyzer(index, text):
                 correctedName = correctorName.suggest(word, limit=1, prefix=2, maxdist=3)
                 print(word, 'suggestions for type:', correctedType)
                 print(word, 'suggestions for type name:', correctedName)
+
                 if len(correctedType) > 0:
                     isType = True
                     analyzedText[j] = correctedType[0]
                     allowType = Term('type', fixFilter(correctedType[0]))
 
-                    # also add things from type 'vredno ogleda' that have matching name
+                    # also add things from type 'vredno ogleda' and 'Biseri narave' that have matching name
                     # (some items have type 'vredno ogleda', instead of their real type,
                     # for example, 'Ljubljanski grad' - instead, we search for 'grad')
                     if len(correctedName) > 0:
                         nameSingular = correctedName[0]
+                        additionalTypeName = Term('name', correctedName[0])
+
+                        # vredno ogleda
                         addType = 'vredno'
                         additionalType = Term('type', addType)
-                        additionalTypeName = Term('name', correctedName[0])
                         additionalTypeFilter = And([additionalType, additionalTypeName])
-                        print(additionalTypeFilter)
+
+                        # biseri narave
+                        addType2 = 'biseri'
+                        additionalType2 = Term('type', addType2)
+                        additionalTypeFilter2 = And([additionalType2, additionalTypeName])
 
                         # join with regular type filter
-                        allowType = Or([allowType, additionalTypeFilter])
+                        allowType = Or([allowType, additionalTypeFilter, additionalTypeFilter2])
 
 
         # if we find a name in singular, add it to the query list
@@ -661,8 +667,8 @@ with open('kraji_slovenija', 'rb') as fp:
 #results = analyzeQuery(index, 'grat')
 
 results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
-results = analyzeQuery(index, 'povej mi kaj o bledu')
-results = analyzeQuery(index, 'novo mesjto')
+results = analyzeQuery(index, 'reke pri bledu')
+results = analyzeQuery(index, 'arhitektura ljubljana')
 
 results = analyzeQuery(index, 'ljubljna')   #!!!
 

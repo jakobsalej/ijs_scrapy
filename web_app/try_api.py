@@ -7,6 +7,8 @@ baseAPIUrl = 'http://127.0.0.1:5000/'
 
 def testItem(type, id):
 
+    # get item form DB
+
     fullUrl = baseAPIUrl + 'item/' + type + '/' + str(id)
     response = requests.get(fullUrl)
     print(response.json())
@@ -16,6 +18,8 @@ def testItem(type, id):
 
 def testQuery(query):
 
+    # get results for given query
+
     query = urllib.parse.quote(query)
     fullUrl = baseAPIUrl + 'query/' + query
     response = requests.get(fullUrl)
@@ -24,8 +28,7 @@ def testQuery(query):
     print(data)
     print('-----------------------------------------------------------------------------------------------\n')
     for key in data:
-        print(data[key]['id'])
-
+        print(data[key]['name'], data[key]['regionName'])
 
     return
 

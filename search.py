@@ -4,6 +4,7 @@
 import os
 import collections
 import pickle
+import Levenshtein
 
 from whoosh.index import create_in, open_dir
 from whoosh.fields import *
@@ -19,6 +20,7 @@ from slovenia_info_scra import Attraction, Region, Town
 # list of special words we'd like to detect to show more than one result
 # SLO
 specialWords = ['seznam', 'tabela']
+commonWords = ['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je']
 prepositions = ['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven']
 
 
@@ -121,27 +123,32 @@ def findMatch(index, query):
     # using whole query we try to find requested town/region/attraction in query
 
     newQueryList = processText(query, mode=1)
-    newQueryList = getLocationSuggestion(newQueryList)
+    newQueryList, correction = getLocationSuggestion(newQueryList)
     processedQuery = ' '.join(newQueryList)
 
     # search
-    results = searchIndex(index, processedQuery, 5)
+    results = searchIndex(index, processedQuery, 1)
     isExactMatch = False
     result = None
-    otherWords = None
+    remainingWords = None
     if len(results) > 0:
 
-        # let's take a look at first result
+        # if no match was found in a list with all slo towns
+        # compare result's name, place and destination with user query (but, BUT, we remove common words before that)
+        # get the closest one
+        # for example: query 'povej mi kaj je na bledu' will return 'veseli december na bledu', but we want only 'Bled'
+        closestString = None
         result = results[0]
-        name = result['name']
-        place = result['place']
-        destination = result['destination']
+        if not correction and result['name'] != result['place']:
+            locations = [result['name'], result['place'], result['destination']]
+            closestString = selectClosestString(locations, processText(processedQuery, commonWords, mode=2))
+            print('Closest find:', closestString)
         # TODO: something with that
 
         # remove matching words from original query by using hit's name as stoplist
         nameList = processText(results[0]['name'])
         remainingWords = processText(processedQuery, nameList)
-        print(otherWords)
+        print(remainingWords)
 
         # check for exact match by comparing strings
         print(nameList, newQueryList)
@@ -149,7 +156,23 @@ def findMatch(index, query):
             isExactMatch = True
 
     # TODO: something smart with "other words"
-    return result, remainingWords, isExactMatch
+    return results, remainingWords, isExactMatch
+
+
+def selectClosestString(list, location):
+
+    # using Levenshtein distance, return string from a given list that is closest to corrected location word
+    best = None
+    bestRatio = 0
+    for word in list:
+        ratio = Levenshtein.ratio(word, location)
+        #print(word, ';', location, '- ratio:', ratio)
+
+        if ratio > bestRatio:
+            bestRatio = ratio
+            best = word
+
+    return best
 
 
 def processText(str, stopWords=None, mode=1):
@@ -193,7 +216,7 @@ def calculatePrefix(word):
 
 def getSuggestionQuery(index, query, field):
 
-    # returns new suggested query
+    # returns new query by correcting the old one
 
     qp = QueryParser(field, schema=index.schema)
     parsedQuery = qp.parse(query)
@@ -208,7 +231,9 @@ def getLocationSuggestion(queryList, prefix=-1):
 
     # firs we look for suggestions on the list of all slovenian towns
     # if there is a match, we swap it with original word
+    # if prefix == -1, automatically calculate prefix for a given word; else, use prefix set by user
 
+    correction = None
     correctorList = ListCorrector(townsStatic)
     for i, word in enumerate(queryList):
         if len(word) > 2:
@@ -220,14 +245,16 @@ def getLocationSuggestion(queryList, prefix=-1):
             if len(corrected) > 0:
                 print('Swapping words from list:', queryList[i], corrected[0])
                 queryList[i] = corrected[0]
+                correction = corrected[0]
 
-    return queryList
+    return queryList, correction
 
 
 def searchIndex(index, newText, resultLimit=1, filterQuery=None):
 
     # search for a given string
     with index.searcher() as searcher:
+
         # using MultifieldParser to search all relevant fields
 
         # in case of multiple words in query, use OR (query: 'lake bled' => 'lake' OR 'bled')
@@ -236,7 +263,6 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
         query = MultifieldParser(["name", "type", "regionName", "description", "tags", "topResult", "destination", "place"], index.schema, group=orGroup).parse(newText)
         results = searcher.search(query, limit=resultLimit, terms=True, filter=filterQuery)
         print('Number of hits:', len(results))
-
 
         # saving hits (only hits with score bigger than 0.5 - topResult value) to the ordered dict, so we can return it
         dict = collections.OrderedDict()
@@ -270,7 +296,7 @@ def analyzeQuery(index, query):
     # if its not exact hit (word for word in title), save it for later
     resultHit, exactHit = checkOneHit(index, query)
     if exactHit:
-        print('RETURNING:', resultHit)
+        print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'])
         print('-------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
 
@@ -283,7 +309,7 @@ def analyzeQuery(index, query):
     sa = StandardAnalyzer(stoplist=specialWords)
     print('Special words: ', [(token.text, token.stopped) for token in sa(query, removestops=False)])
 
-    # look for stopwords (seznam, tabela) or plural form to decide if user wants more than one result
+    # look for stopwords ('seznam', 'tabela') or plural form to decide if user wants more than one result
     limit = 1
     newQuery = []
     with index.searcher() as s:
@@ -310,9 +336,14 @@ def analyzeQuery(index, query):
     if limit == 10:
         text, gotLocation, locationFilter, typeFilter, correctedLocation = multipleResultsAnalyzer(index, text)
         filterQuery = joinFilters(typeFilter, locationFilter)
+
     else:
-        # since we now know user wants just one hit, we can return the one we saved earlier, from 'checkOneHit' method
-        print('RETURNING:', resultHit)
+        # since we now know user wants just one hit, we can return the one we saved earlier, from 'findMatch' method
+        if len(resultHit) > 0:
+            print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'])
+        else:
+            print('RETURNING: no hits :(')
+
         print('---------------------------------------------------------------------------------------------\n\n\n\n\n')
         return resultHit
 
@@ -651,10 +682,10 @@ def selectRegions(regionCount):
 #init()
 
 # testing search
-index = open_dir("index")
+#index = open_dir("index")
 
 # get slovenian towns from file
-with open('kraji_slovenija', 'rb') as fp:
+with open('../kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
@@ -666,12 +697,10 @@ with open('kraji_slovenija', 'rb') as fp:
 #results = analyzeQuery(index, 'lovrenška jezera')
 #results = analyzeQuery(index, 'grat')
 
-results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
-results = analyzeQuery(index, 'reke pri bledu')
-results = analyzeQuery(index, 'arhitektura ljubljana')
+#results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
+#results = analyzeQuery(index, 'poveej mi kaj o bledu')
+#results = analyzeQuery(index, 'arhitektura ljubljana')
+#results = analyzeQuery(index, 'ljubljna')   #!!!
 
-results = analyzeQuery(index, 'ljubljna')   #!!!
-
-
-# TODO: build database again
-# TODO. maybe add dynamic prefix to improve search results? (in places where we only look for variations of words)
+# TODO: check this query
+#analyzeQuery(index, 'goriško kraska')   # !!!!!!

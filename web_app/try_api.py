@@ -23,12 +23,11 @@ def testQuery(query):
     query = urllib.parse.quote(query)
     fullUrl = baseAPIUrl + 'query/' + query
     response = requests.get(fullUrl)
-    print(response)
     data = response.json()
     print(data)
     print('-----------------------------------------------------------------------------------------------\n')
     for key in data:
-        print(data[key]['name'], data[key]['regionName'])
+        print(data[key]['name'], ',', data[key]['regionName'])
 
     return
 
@@ -36,5 +35,5 @@ def testQuery(query):
 
 # example JSON files
 #testItem('attraction', 300)
-testQuery('bled')
+testQuery('goriško kraska')
 #testQuery('ljubljanski grad')

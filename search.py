@@ -41,7 +41,7 @@ attrSchema = Schema(id=ID(stored=True),
                     place=TEXT(stored=True),
                     gpsX=NUMERIC,
                     gpsY=NUMERIC,
-                    topResult=BOOLEAN,
+                    topResult=BOOLEAN(stored=True),
                     typeID=TEXT(stored=True)
                     )
 
@@ -75,6 +75,7 @@ def init():
             place=attraction.place,
             gpsX=attraction.gpsX,
             gpsY=attraction.gpsY,
+            topResult=False,
             typeID='attraction'
         )
 
@@ -109,7 +110,8 @@ def init():
             regionName=region.name,    # just for displaying results, doesn't matter
             destination='',
             place='',
-            type='region',
+            type='regije',
+            topResult=False,
             typeID='region'
         )
         
@@ -121,6 +123,7 @@ def init():
 def findMatch(index, query):
 
     # using whole query we try to find requested town/region/attraction in query
+    print('Starting with "findMatch".', query)
 
     newQueryList = processText(query, mode=1)
     newQueryList, correction = getLocationSuggestion(newQueryList)
@@ -129,7 +132,6 @@ def findMatch(index, query):
     # search
     results = searchIndex(index, processedQuery, 1)
     isExactMatch = False
-    result = None
     remainingWords = None
     if len(results) > 0:
 
@@ -145,13 +147,20 @@ def findMatch(index, query):
             print('Closest find:', closestString)
         # TODO: something with that
 
+    else:
+        print('No hits, correcting query and searching again')
+        suggestedProcessedQueryList, suggestion = getSuggestionWord(index, newQueryList, 'name')
+        suggestedProcessedQuery = ' '.join(suggestedProcessedQueryList)
+        results = searchIndex(index, suggestedProcessedQuery, 1)
+
+    if len(results) > 0:
         # remove matching words from original query by using hit's name as stoplist
         nameList = processText(results[0]['name'])
         remainingWords = processText(processedQuery, nameList)
-        print(remainingWords)
+        print('Remaining words after removing hit words:', remainingWords)
 
         # check for exact match by comparing strings
-        print(nameList, newQueryList)
+        print('Compare:', nameList, newQueryList)
         if ' '.join(nameList) == ' '.join(newQueryList):
             isExactMatch = True
 
@@ -159,14 +168,14 @@ def findMatch(index, query):
     return results, remainingWords, isExactMatch
 
 
-def selectClosestString(list, location):
+def selectClosestString(list, string):
 
-    # using Levenshtein distance, return string from a given list that is closest to corrected location word
+    # using Levenshtein distance, return word from a given list that is closest to a given string
     best = None
     bestRatio = 0
     for word in list:
-        ratio = Levenshtein.ratio(word, location)
-        #print(word, ';', location, '- ratio:', ratio)
+        ratio = Levenshtein.ratio(word, string)
+        #print(word, ';', string, '- ratio:', ratio)
 
         if ratio > bestRatio:
             bestRatio = ratio
@@ -178,10 +187,10 @@ def selectClosestString(list, location):
 def processText(str, stopWords=None, mode=1):
 
     # returns cleaned up text; if mode == 1, return list; if mode == 2, return string
-    # TODO: odstrani sumnike, vendar ne pred iskanjem?
 
     # remove special characters
-    str = re.sub('[^a-zA-Z0-9 \n\.]', '', str)
+    # TODO. not ok, also removes ščž..
+    # str = re.sub('[^a-zA-Z0-9 \n\.]', '', str)
 
     # next we use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter
     # (docs: 'http://whoosh.readthedocs.io/en/latest/api/analysis.html#analyzers')
@@ -214,14 +223,46 @@ def calculatePrefix(word):
     return prefix
 
 
+def getSuggestionWord(index, query, field, prefix=-1, maxDist=3):
+    
+    # TODO: merge this with getLocationSuggestion
+    # returns new query by checking each word in original query list and correcting it (if needed) with word from a given field
+    # if prefix == -1, automatically calculate prefix for a given word; else, use prefix set by user
+
+    correction = None
+    with index.searcher() as s:
+        corrector = s.corrector(field)
+
+        for i, word in enumerate(query):
+            if len(word) > 2:
+
+                # gradually increase maxdist --> don't know why we need to do this
+                # there seems to be a bug/feature in whoosh
+                # for bigger maxdist, not always is the closest suggestion selected??
+                # example: word = goricko, maxdist=1 suggestion=goričko, maxdist=2 suggestion=gori
+                for j in range(0, maxDist+1):
+                    if prefix == -1:
+                        corrected = corrector.suggest(word, limit=1, prefix=calculatePrefix(word), maxdist=j)
+                    else:
+                        corrected = corrector.suggest(word, limit=1, prefix=prefix, maxdist=j)
+
+                    if len(corrected) > 0:
+                        print('Swapping words from list:', query[i], corrected[0])
+                        query[i] = corrected[0]
+                        correction = corrected[0]
+                        break
+
+    return query, correction
+
+
 def getSuggestionQuery(index, query, field):
 
-    # returns new query by correcting the old one
+    # returns new query by correcting the old one using correct_query
 
     qp = QueryParser(field, schema=index.schema)
     parsedQuery = qp.parse(query)
     with index.searcher() as s:
-        corrected = s.correct_query(parsedQuery, query, prefix=2, maxdist=3)
+        corrected = s.correct_query(parsedQuery, query, prefix=1, maxdist=2)
         print('Suggestion for query:', corrected.string)
 
     return corrected.string
@@ -269,7 +310,7 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
 
         hasResult = False
         for i, result in enumerate(results):
-            if float(results.score(i)) > 0.5:
+            if (result['topResult'] and float(results.score(i)) > 0.5) or (not result['topResult'] and float(results.score(i)) > 0):
                 hasResult = True
                 print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
                 dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
@@ -682,10 +723,10 @@ def selectRegions(regionCount):
 #init()
 
 # testing search
-#index = open_dir("index")
+index = open_dir("index")
 
 # get slovenian towns from file
-with open('../kraji_slovenija', 'rb') as fp:
+with open('kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
@@ -703,4 +744,6 @@ with open('../kraji_slovenija', 'rb') as fp:
 #results = analyzeQuery(index, 'ljubljna')   #!!!
 
 # TODO: check this query
-#analyzeQuery(index, 'goriško kraska')   # !!!!!!
+analyzeQuery(index, 'goriska kraska')   # !!!!!!
+
+# TODO: regije v slo

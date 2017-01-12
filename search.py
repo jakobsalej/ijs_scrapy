@@ -123,11 +123,26 @@ def init():
 def findMatch(index, query):
 
     # using whole query we try to find requested town/region/attraction in query
-    print('Starting with "findMatch".', query)
+    print('Starting with "findMatch", user query is:', query)
 
-    newQueryList = processText(query, mode=1)
-    newQueryList, correction = getLocationSuggestion(newQueryList)
+    # proccess text and look for suggestions in names
+    # we need to recognize variations - ljubljana, ljubljani, ljubljano,...
+    newQueryList = processText(query, commonWords, mode=1)
+    newQueryList, lastCorrection = getSuggestionWord(index, newQueryList, 'name', mode=1)
+
+    # check if any word in query matches a place in a static list with all slovenian towns
+    # TODO: think hard if we really need to do this
+    isPlace = False
+    placeName = None
+    placeIndex = -1
+    for i, word in enumerate(newQueryList):
+        if word in townsStatic:
+            isPlace = True
+            placeIndex = i
+            placeName = word
+
     processedQuery = ' '.join(newQueryList)
+    print('Starting search with query:', processedQuery)
 
     # search
     results = searchIndex(index, processedQuery, 1)
@@ -141,11 +156,12 @@ def findMatch(index, query):
         # for example: query 'povej mi kaj je na bledu' will return 'veseli december na bledu', but we want only 'Bled'
         closestString = None
         result = results[0]
-        if not correction and result['name'] != result['place']:
-            locations = [result['name'], result['place'], result['destination']]
+        if not placeName and result['name'] != result['place']:
+            locations = [result['name'], result['place'], result['destination'], result['regionName']]
             closestString = selectClosestString(locations, processText(processedQuery, commonWords, mode=2))
             print('Closest find:', closestString)
-        # TODO: something with that
+        # TODO: something with that, also use 'isPlace', 'placeIndex',...
+        # TODO: return the closest one? 'povej mi kaj o bledu'
 
     else:
         print('No hits, correcting query and searching again')
@@ -160,12 +176,13 @@ def findMatch(index, query):
         print('Remaining words after removing hit words:', remainingWords)
 
         # check for exact match by comparing strings
-        print('Compare:', nameList, newQueryList)
+        print('Compare names:', nameList, newQueryList)
         if ' '.join(nameList) == ' '.join(newQueryList):
             isExactMatch = True
 
+    print('\n')
     # TODO: something smart with "other words"
-    return results, remainingWords, isExactMatch
+    return results, remainingWords, isExactMatch, placeName
 
 
 def selectClosestString(list, string):
@@ -223,15 +240,21 @@ def calculatePrefix(word):
     return prefix
 
 
-def getSuggestionWord(index, query, field, prefix=-1, maxDist=3):
-    
-    # TODO: merge this with getLocationSuggestion
-    # returns new query by checking each word in original query list and correcting it (if needed) with word from a given field
+def getSuggestionWord(index, query, field, prefix=-1, maxDist=3, mode=1):
+
+    # returns new query by checking each word in original query list and correcting it (if needed) with word
+    # from a given field (mode=1)/ list (mode=2)
     # if prefix == -1, automatically calculate prefix for a given word; else, use prefix set by user
+
+    print('Getting suggestions for each word.')
 
     correction = None
     with index.searcher() as s:
-        corrector = s.corrector(field)
+
+        if mode == 1:
+            corrector = s.corrector(field)
+        elif mode == 2:
+            corrector = ListCorrector(field)
 
         for i, word in enumerate(query):
             if len(word) > 2:
@@ -240,14 +263,16 @@ def getSuggestionWord(index, query, field, prefix=-1, maxDist=3):
                 # there seems to be a bug/feature in whoosh
                 # for bigger maxdist, not always is the closest suggestion selected??
                 # example: word = goricko, maxdist=1 suggestion=goričko, maxdist=2 suggestion=gori
+                # probably returns the most frequent word for given restraints?
                 for j in range(0, maxDist+1):
                     if prefix == -1:
                         corrected = corrector.suggest(word, limit=1, prefix=calculatePrefix(word), maxdist=j)
+
                     else:
                         corrected = corrector.suggest(word, limit=1, prefix=prefix, maxdist=j)
 
                     if len(corrected) > 0:
-                        print('Swapping words from list:', query[i], corrected[0])
+                        print('Swapping words:', query[i], corrected[0])
                         query[i] = corrected[0]
                         correction = corrected[0]
                         break
@@ -323,13 +348,11 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
 
 def analyzeQuery(index, query):
 
-    print('Original search query:', query)
-
-    # TODO: odstrani šumnike?
+    print('Original search query:', query, '\n')
 
     # check for empty / non-existent query
     if not query or query.isspace():
-        print('RETURNING: Query is empty.')
+        print('Nothing to search for, query is empty.')
         return {}
 
     # before we start with analysis, let's check if there is a hit that matches search query word for word in title
@@ -342,7 +365,7 @@ def analyzeQuery(index, query):
         return resultHit
 
     # find a location match (from a list with all slovenian towns)
-    resultHit, remainingWords, exactHit = findMatch(index, query)
+    resultHit, remainingWords, exactHit, correction = findMatch(index, query)
 
     # if there was no exact hit (query == name of first result), we try to do some smart things
     # use standard analyzer which composes a RegexTokenizer with a LowercaseFilter and optional StopFilter
@@ -354,17 +377,23 @@ def analyzeQuery(index, query):
     limit = 1
     newQuery = []
     with index.searcher() as s:
+
         correctorType = s.corrector('type')
         for token in sa(query, removestops=False):
+
             # len(token.test) > 1 is needed as Whoosh automatically removes all words that are only one letter long,
             # but we need them as prepositions (s, z, v)
             if token.stopped == True and len(token.text) > 1:
                 limit = 10
+
             # len(token.text) > 2 is needed, otherwise type matches words like 'na'
-            elif len(token.text) > 2 and len(correctorType.suggest(token.text, limit=1, maxdist=0, prefix=calculatePrefix(token.text))) > 0:
+            # also check that 'token.text' is not a slovenian town, because
+            # some types are names of towns, for example there is a type 'ljubljana'
+            elif len(token.text) > 2 and len(correctorType.suggest(token.text, limit=1, maxdist=0, prefix=calculatePrefix(token.text))) > 0 and not token.text in townsStatic:
                 print('Found type in plural, set limit to 10!:', token.text)
                 limit = 10
                 newQuery.append(token.text)
+
             else:
                 newQuery.append(token.text)
 
@@ -376,12 +405,21 @@ def analyzeQuery(index, query):
     filterQuery = None
     if limit == 10:
         text, gotLocation, locationFilter, typeFilter, correctedLocation = multipleResultsAnalyzer(index, text)
+
+        # in case we already have a location match from 'findMatch', we'd rather use that since we know it definitely
+        # matches a place in Slovenia
+        if correction:
+            locationFilter = Term('place', correction)
+            gotLocation = 2
+            correctedLocation = correction
+
         filterQuery = joinFilters(typeFilter, locationFilter)
 
     else:
         # since we now know user wants just one hit, we can return the one we saved earlier, from 'findMatch' method
         if len(resultHit) > 0:
             print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'])
+
         else:
             print('RETURNING: no hits :(')
 
@@ -396,16 +434,21 @@ def analyzeQuery(index, query):
         if limit == 1:
             print('No hits!')
         # more-than-one-result search
+
         elif limit == 10:
             # returns 3 location filter options: place, destination, region; if there are still no results
             # after applying them, remove location filter completely
+            # TODO: don't do this if you already got the object from 'findMatch'
             newLocationFilter, fieldOptions = changeLocationFilter(index, correctedLocation, locationFilter)
 
             while len(hits) == 0 and gotLocation > -1:
-                if newLocationFilter[gotLocation-1] != None and newLocationFilter[gotLocation-1] != '' :
+
+                if newLocationFilter[gotLocation-1] != None and newLocationFilter[gotLocation-1] != '':
+
                     if gotLocation == 0:
                         # if nothing was found using location filter, try without it
                         newFilter = None
+
                     else:
                         newFilter = Term(fieldOptions[gotLocation-1], fixFilter(newLocationFilter[gotLocation-1]))
 
@@ -418,7 +461,6 @@ def analyzeQuery(index, query):
     print('-------------------------------------------------------------------------------------------------')
     print('-------------------------------------------------------------------------------------------------\n\n\n\n\n')
     return hits
-
 
 
 def changeLocationFilter(index, correctedLocation, locationFilter):
@@ -441,10 +483,10 @@ def changeLocationFilter(index, correctedLocation, locationFilter):
     return locationOptions, fieldOptions
 
 
-
 def checkOneHit(index, query):
 
     # let's check if there is a hit that matches search query word for word in title
+    print('checkOneHit: is there an item that matches search query word for word?')
 
     # tokenizer, lowercase filters
     sa = StandardAnalyzer(stoplist=None)
@@ -488,13 +530,14 @@ def checkOneHit(index, query):
             print('EXACT MATCH!!')
             exactHit = True
 
+    print('\n')
     return hit, exactHit
-
 
 
 def multipleResultsAnalyzer(index, text):
 
     # here we try to do all the smart things to make search more accurate when we want more than one result
+    print('MULTIPLE RESULTS ANALYZER')
 
     # look for any prepositions and remove them (as stopwords)
     sa = StandardAnalyzer(stoplist=prepositions)
@@ -598,8 +641,8 @@ def multipleResultsAnalyzer(index, text):
         # turn list back to string
         text = ' '.join(analyzedText)
 
+        print('\n')
         return text, gotlocation, allowLocation, allowType, correctedLocation
-
 
 
 def joinTerms(type, list):
@@ -618,7 +661,6 @@ def joinTerms(type, list):
     return joinedTerm
 
 
-
 def fixFilter(string):
 
     # ugly fix: take only the first word of filter and LOWERCASE it!
@@ -627,7 +669,6 @@ def fixFilter(string):
     fixed = stringSplit[0].lower()
 
     return fixed
-
 
 
 def joinFilters(filter1, filter2):
@@ -647,7 +688,6 @@ def joinFilters(filter1, filter2):
     print('Filter:', filter)
 
     return filter
-
 
 
 def findCorrectLocation(index, word):
@@ -672,7 +712,6 @@ def findCorrectLocation(index, word):
     return selectedRegions
 
 
-
 def countRegion(placesRegion, result):
 
     # just a helper method for 'findCorrectLocation'
@@ -688,7 +727,6 @@ def countRegion(placesRegion, result):
         placesRegion[result] = {'count': 1}
 
     return placesRegion
-
 
 
 def selectRegions(regionCount):
@@ -734,16 +772,16 @@ with open('kraji_slovenija', 'rb') as fp:
 
 # TODO: find a way to distinguish between location and type?
 #results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
-#results = analyzeQuery(index, 'reke ljubljana')     # TODO: improve this query!
-#results = analyzeQuery(index, 'lovrenška jezera')
-#results = analyzeQuery(index, 'grat')
+results = analyzeQuery(index, 'reke ljubljana')
+results = analyzeQuery(index, 'lovrenška jezera')
+results = analyzeQuery(index, 'grat')
 
 #results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
-#results = analyzeQuery(index, 'poveej mi kaj o bledu')
+results = analyzeQuery(index, 'povej mi kaj o bledu')
 #results = analyzeQuery(index, 'arhitektura ljubljana')
-#results = analyzeQuery(index, 'ljubljna')   #!!!
+results = analyzeQuery(index, 'ljubljna')   #!!!
 
 # TODO: check this query
-analyzeQuery(index, 'goriska kraska')   # !!!!!!
+analyzeQuery(index, 'gorovja v sloveniji')
 
-# TODO: regije v slo
+# TODO: filters for slovenia/obcine

@@ -12,7 +12,7 @@ print(places)
 print('Count:', len(places))
 
 # lowercase
-places = [place.lower() for place in places]
+places = sorted([place.lower() for place in places])
 
 # saving to file
 with open('kraji_slovenija', 'wb') as fp:

@@ -17,11 +17,17 @@ from slovenia_info_scra import Attraction, Region, Town
 
 # this only works for user queries in slovenian language
 
+# WARNING: to be able to get suggestions, all list must be SORTED!
+
 # list of special words we'd like to detect to show more than one result
 # SLO
-specialWords = ['seznam', 'tabela']
-commonWords = ['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je']
-prepositions = ['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven']
+countryList = sorted(['dežela', 'država', 'slovenija', 'deželi'])
+print(countryList)
+specialWords = sorted(['seznam', 'tabela'])
+commonWords = sorted(['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je', 'prikaži', 'morda', 'tej'])
+prepositions = sorted(['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven'])
+
+
 
 
 # schema for attribute entries
@@ -394,6 +400,8 @@ def analyzeQuery(index, query):
                 limit = 10
                 newQuery.append(token.text)
 
+
+
             else:
                 newQuery.append(token.text)
 
@@ -574,33 +582,51 @@ def multipleResultsAnalyzer(index, text):
         # no preposition means no info on what is type and what is location
         if locationIndex == -1:
             print('No location index!')
-            # TODO: improve detection of location / type
 
-
+        # LOCATION FILTER
         for j, word in enumerate(analyzedText):
             if j == locationIndex:
                 fullLocation = ' '.join(analyzedText[j:len(analyzedText)])
+                fullLocationList = analyzedText[j:len(analyzedText)]
                 locationList = ['regionName', 'destination', 'place']
+                filterSlovenia = ListCorrector(countryList)
 
-                for i, location in enumerate(locationList):
-                    qp = QueryParser(location, schema=index.schema)
-                    qLocation = qp.parse(fullLocation)
-                    corrected = s.correct_query(qLocation, fullLocation, prefix=2, maxdist=2)
+                # if we detect word from list 'countryList', we intentionally want location filter to be 'None'
+                # check each word in part we think represents location (part after preposition) for a match with list
+                noFilter = False
+                print('loc', fullLocationList)
+                for w in fullLocationList:
+                    suggestionCountry = filterSlovenia.suggest(w, limit=1, prefix=1, maxdist=2)     # something weird: dežela, deželi???
+                    print(w, suggestionCountry)
+                    if len(suggestionCountry) > 0:
+                        noFilter = True
+                        break
 
-                    if corrected.query != qLocation:
-                        analyzedText[j:len(analyzedText)] = corrected.string.split()    # replace location in query with corrected version
-                        allowLocation = corrected.query                                 # set location filter, starting from broader to smaller (region -> place)
-                        gotlocation = i                                                 # save location field index
-                        correctedLocation = corrected.string                            # save corrected name
+                if not noFilter:
+                    print('Setting location filter')
+                    for i, location in enumerate(locationList):
+                        qp = QueryParser(location, schema=index.schema)
+                        qLocation = qp.parse(fullLocation)
+                        corrected = s.correct_query(qLocation, fullLocation, prefix=2, maxdist=2)
 
-                if not allowLocation:
-                    # in case of no match with region, destination or place, do a look up for region
-                    selectedRegions = findCorrectLocation(index, word)
-                    gotlocation = 0
-                    locationField = 'regionName'
-                    allowLocation = joinTerms(locationField, selectedRegions)
+                        if corrected.query != qLocation:
+                            analyzedText[j:len(analyzedText)] = corrected.string.split()    # replace location in query with corrected version
+                            allowLocation = corrected.query                                 # set location filter, starting from broader to smaller (region -> place)
+                            gotlocation = i                                                 # save location field index
+                            correctedLocation = corrected.string                            # save corrected name
 
+                    if not allowLocation:
+                        # in case of no match with region, destination or place, do a look up for region
+                        selectedRegions = findCorrectLocation(index, word)
+                        gotlocation = 0
+                        locationField = 'regionName'
+                        allowLocation = joinTerms(locationField, selectedRegions)
 
+                else:
+                    # remove unecessary words in query
+                    analyzedText = analyzedText[0:j]
+
+            # TYPE FILTER
             # other words - check corrections of 'type' field
             elif isType is False and len(word) > 1:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
@@ -640,6 +666,7 @@ def multipleResultsAnalyzer(index, text):
 
         # turn list back to string
         text = ' '.join(analyzedText)
+        print(text)
 
         print('\n')
         return text, gotlocation, allowLocation, allowType, correctedLocation
@@ -782,6 +809,6 @@ results = analyzeQuery(index, 'povej mi kaj o bledu')
 results = analyzeQuery(index, 'ljubljna')   #!!!
 
 # TODO: check this query
-analyzeQuery(index, 'gorovja v sloveniji')
+analyzeQuery(index, 'gradovi v tej deželi sloveniji')
 
 # TODO: filters for slovenia/obcine

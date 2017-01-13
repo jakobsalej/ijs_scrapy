@@ -352,9 +352,12 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
         return dict
 
 
-def analyzeQuery(index, query):
+def analyzeQuery(index, query, locationAssistant=None):
 
     print('Original search query:', query, '\n')
+
+    # simulating test data
+    locationAssistant = 'Ljubljana'
 
     # check for empty / non-existent query
     if not query or query.isspace():
@@ -420,6 +423,11 @@ def analyzeQuery(index, query):
             locationFilter = Term('place', correction)
             gotLocation = 2
             correctedLocation = correction
+
+        # if no location filter is set yet, use the default one (if available)
+        if locationFilter == None:
+            locationFilter = setDefaultLocationFilter(locationAssistant)
+            # TODO: clashes with no filter in case 'v Sloveniji' -> FIX IT
 
         filterQuery = joinFilters(typeFilter, locationFilter)
 
@@ -623,7 +631,7 @@ def multipleResultsAnalyzer(index, text):
                         allowLocation = joinTerms(locationField, selectedRegions)
 
                 else:
-                    # remove unecessary words in query
+                    # remove unnecessary words in query
                     analyzedText = analyzedText[0:j]
 
             # TYPE FILTER
@@ -781,6 +789,12 @@ def selectRegions(regionCount):
     return selectedRegions
 
 
+def setDefaultLocationFilter(location, field):
+
+    # set filter with location from assistant (for localized search)
+    locationFilter = Term(field, location)
+
+    return locationFilter
 
 
 
@@ -809,6 +823,6 @@ results = analyzeQuery(index, 'povej mi kaj o bledu')
 results = analyzeQuery(index, 'ljubljna')   #!!!
 
 # TODO: check this query
-analyzeQuery(index, 'gradovi v tej deželi sloveniji')
+analyzeQuery(index, 'gradovi v gorenjski')
 
 # TODO: filters for slovenia/obcine

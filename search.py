@@ -23,8 +23,9 @@ from slovenia_info_scra import Attraction, Region, Town
 # SLO
 countryList = sorted(['dežela', 'država', 'slovenija', 'deželi'])
 nearByList = sorted(['okolici', 'bližini', 'blizu', 'okolišu', 'občini'])
+znamenitostiList = sorted(['znamenitosti', 'zanimivosti', 'atrakcije'])
 specialWords = sorted(['seznam', 'tabela'])
-commonWords = sorted(['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je', 'prikaži', 'morda', 'tej'])
+commonWords = sorted(['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je', 'prikaži', 'morda', 'tej', 'ali', 'poznaš'])
 prepositions = sorted(['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven'])
 
 
@@ -49,7 +50,6 @@ attrSchema = Schema(id=ID(stored=True),
                     topResult=BOOLEAN(stored=True),
                     typeID=TEXT(stored=True)
                     )
-
 
 
 def init():
@@ -582,6 +582,7 @@ def multipleResultsAnalyzer(index, text):
     with index.searcher() as s:
         correctorType = s.corrector('type')
         correctorName = s.corrector('name')
+        correctorAttractions = ListCorrector(znamenitostiList)
         gotlocation = -1                        # 0 = region, 1 = destination, 2 = place
         allowLocation = None                    # location filter
         allowType = None                        # type filter
@@ -652,10 +653,18 @@ def multipleResultsAnalyzer(index, text):
             elif isType is False and len(word) > 1:
                 correctedType = correctorType.suggest(word, limit=1, prefix=2)
                 correctedName = correctorName.suggest(word, limit=1, prefix=2, maxdist=3)
+                correctedAttractions = correctorAttractions.suggest(word, limit=1, prefix=2)
                 print(word, 'suggestions for type:', correctedType)
                 print(word, 'suggestions for type name:', correctedName)
+                print('filter for attractions:', correctedAttractions)
 
-                if len(correctedType) > 0:
+                if len(correctedAttractions) > 0:
+                    # if a word matches something like 'znamenitosti', we want to return all attractions
+                    # set type filter accordingly (read as: no type filter)
+                    # TODO: exclude some types?
+                    pass
+
+                elif len(correctedType) > 0:
                     isType = True
                     analyzedText[j] = correctedType[0]
                     allowType = Term('type', fixFilter(correctedType[0]))
@@ -826,20 +835,13 @@ with open('kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
-
-
-# TODO: find a way to distinguish between location and type?
-#results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
-results = analyzeQuery(index, 'reke v okolici')
-results = analyzeQuery(index, 'seznam arhitekture')
-results = analyzeQuery(index, 'grat')
+results = analyzeQuery(index, 'slovenj gradec')
+#results = analyzeQuery(index, 'znamenitosti v blizini')
+#results = analyzeQuery(index, 'seznam arhitekture')
+#results = analyzeQuery(index, 'grat')
 
 #results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
-results = analyzeQuery(index, 'povej mi kaj o bledu')
+#results = analyzeQuery(index, 'povej mi kaj o bledu')
 #results = analyzeQuery(index, 'arhitektura ljubljana')
-results = analyzeQuery(index, 'ljubljna')   #!!!
+#results = analyzeQuery(index, 'ljubljna')   #!!!
 
-# TODO: check this query
-analyzeQuery(index, 'gradovi v gorenjski')
-
-# TODO: filters for slovenia/obcine

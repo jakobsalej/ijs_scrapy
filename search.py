@@ -22,11 +22,10 @@ from slovenia_info_scra import Attraction, Region, Town
 # list of special words we'd like to detect to show more than one result
 # SLO
 countryList = sorted(['dežela', 'država', 'slovenija', 'deželi'])
-print(countryList)
+nearByList = sorted(['okolici', 'bližini', 'blizu', 'okolišu', 'občini'])
 specialWords = sorted(['seznam', 'tabela'])
 commonWords = sorted(['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je', 'prikaži', 'morda', 'tej'])
 prepositions = sorted(['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven'])
-
 
 
 
@@ -145,7 +144,7 @@ def findMatch(index, query):
         if word in townsStatic:
             isPlace = True
             placeIndex = i
-            placeName = word
+            placeName = word    # TODO: need some extra requirements?
 
     processedQuery = ' '.join(newQueryList)
     print('Starting search with query:', processedQuery)
@@ -166,8 +165,8 @@ def findMatch(index, query):
             locations = [result['name'], result['place'], result['destination'], result['regionName']]
             closestString = selectClosestString(locations, processText(processedQuery, commonWords, mode=2))
             print('Closest find:', closestString)
-        # TODO: something with that, also use 'isPlace', 'placeIndex',...
-        # TODO: return the closest one? 'povej mi kaj o bledu'
+            # TODO: something with that, also use 'isPlace', 'placeIndex',...
+            # TODO: return the closest one? 'povej mi kaj o bledu'
 
     else:
         print('No hits, correcting query and searching again')
@@ -324,6 +323,7 @@ def getLocationSuggestion(queryList, prefix=-1):
 
 def searchIndex(index, newText, resultLimit=1, filterQuery=None):
 
+    #print('Tekst', newText)
     # search for a given string
     with index.searcher() as searcher:
 
@@ -357,7 +357,9 @@ def analyzeQuery(index, query, locationAssistant=None):
     print('Original search query:', query, '\n')
 
     # simulating test data
+    # MUST be lowercase!
     locationAssistant = 'Ljubljana'
+    locationAssistant = locationAssistant.lower()
 
     # check for empty / non-existent query
     if not query or query.isspace():
@@ -415,7 +417,7 @@ def analyzeQuery(index, query, locationAssistant=None):
     # more results based on type, not name (probably)
     filterQuery = None
     if limit == 10:
-        text, gotLocation, locationFilter, typeFilter, correctedLocation = multipleResultsAnalyzer(index, text)
+        text, gotLocation, locationFilter, typeFilter, correctedLocation, globalFilter = multipleResultsAnalyzer(index, text)
 
         # in case we already have a location match from 'findMatch', we'd rather use that since we know it definitely
         # matches a place in Slovenia
@@ -425,9 +427,11 @@ def analyzeQuery(index, query, locationAssistant=None):
             correctedLocation = correction
 
         # if no location filter is set yet, use the default one (if available)
-        if locationFilter == None:
-            locationFilter = setDefaultLocationFilter(locationAssistant)
-            # TODO: clashes with no filter in case 'v Sloveniji' -> FIX IT
+        # - except when we don't want one (when user adds '...v Sloveniji' or similar)
+        if locationFilter == None and globalFilter is False:
+            locationFilter = setDefaultLocationFilter(locationAssistant, 'place')
+            gotLocation = 2
+            correctedLocation = locationAssistant
 
         filterQuery = joinFilters(typeFilter, locationFilter)
 
@@ -586,6 +590,8 @@ def multipleResultsAnalyzer(index, text):
         nameSingular = None
         addToQuery = None
         correctedLocation = None
+        noFilter = False
+        globalFilter = False                    # special case where we don't want default location filter
 
         # no preposition means no info on what is type and what is location
         if locationIndex == -1:
@@ -598,15 +604,22 @@ def multipleResultsAnalyzer(index, text):
                 fullLocationList = analyzedText[j:len(analyzedText)]
                 locationList = ['regionName', 'destination', 'place']
                 filterSlovenia = ListCorrector(countryList)
+                filterNearBy = ListCorrector(nearByList)
 
                 # if we detect word from list 'countryList', we intentionally want location filter to be 'None'
                 # check each word in part we think represents location (part after preposition) for a match with list
-                noFilter = False
-                print('loc', fullLocationList)
+                print('full location string:', fullLocationList)
                 for w in fullLocationList:
                     suggestionCountry = filterSlovenia.suggest(w, limit=1, prefix=1, maxdist=2)     # something weird: dežela, deželi???
-                    print(w, suggestionCountry)
+                    suggestionNearBy = filterNearBy.suggest(w, limit=1, prefix=1, maxdist=2)
+                    print('Suggestions: country -', suggestionCountry, '; nearby -', suggestionNearBy)
+
                     if len(suggestionCountry) > 0:
+                        noFilter = True
+                        globalFilter = True
+                        break
+
+                    elif len(suggestionNearBy) > 0:
                         noFilter = True
                         break
 
@@ -677,7 +690,7 @@ def multipleResultsAnalyzer(index, text):
         print(text)
 
         print('\n')
-        return text, gotlocation, allowLocation, allowType, correctedLocation
+        return text, gotlocation, allowLocation, allowType, correctedLocation, globalFilter
 
 
 def joinTerms(type, list):
@@ -791,7 +804,11 @@ def selectRegions(regionCount):
 
 def setDefaultLocationFilter(location, field):
 
-    # set filter with location from assistant (for localized search)
+    # set filter with location reported from assistant (for localized search in nearby area)
+
+    if location is None or location == '':
+        return None
+
     locationFilter = Term(field, location)
 
     return locationFilter
@@ -813,8 +830,8 @@ with open('kraji_slovenija', 'rb') as fp:
 
 # TODO: find a way to distinguish between location and type?
 #results = analyzeQuery(index, 'seznam arhitekturne dediščine na gorenjskem')
-results = analyzeQuery(index, 'reke ljubljana')
-results = analyzeQuery(index, 'lovrenška jezera')
+results = analyzeQuery(index, 'reke v okolici')
+results = analyzeQuery(index, 'seznam arhitekture')
 results = analyzeQuery(index, 'grat')
 
 #results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!

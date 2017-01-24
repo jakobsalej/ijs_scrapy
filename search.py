@@ -405,8 +405,6 @@ def analyzeQuery(index, query, locationAssistant=None):
                 limit = 10
                 newQuery.append(token.text)
 
-
-
             else:
                 newQuery.append(token.text)
 
@@ -421,10 +419,10 @@ def analyzeQuery(index, query, locationAssistant=None):
 
         # in case we already have a location match from 'findMatch', we'd rather use that since we know it definitely
         # matches a place in Slovenia
-        if correction:
-            locationFilter = Term('place', correction)
-            gotLocation = 2
-            correctedLocation = correction
+        #if correction:
+        #   locationFilter = Term('place', correction)
+        #   gotLocation = 2
+        #   correctedLocation = correction
 
         # if no location filter is set yet, use the default one (if available)
         # - except when we don't want one (when user adds '...v Sloveniji' or similar)

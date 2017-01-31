@@ -347,7 +347,7 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
             if (result['topResult'] and float(results.score(i)) > 0.5) or (not result['topResult'] and float(results.score(i)) > 0):
                 hasResult = True
                 print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
-                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
+                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'webpage': result['webpage'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
 
         if hasResult == False:
             print('___ NO RESULTS ___')

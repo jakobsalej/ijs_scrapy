@@ -28,6 +28,9 @@ specialWords = sorted(['seznam', 'tabela'])
 commonWords = sorted(['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je', 'prikaži', 'morda', 'tej', 'ali', 'poznaš'])
 prepositions = sorted(['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven'])
 
+# scoring for assistant
+maxScore = 5
+minScore = 1
 
 
 # schema for attribute entries
@@ -36,7 +39,7 @@ attrSchema = Schema(id=ID(stored=True),
                     link=ID(stored=True),
                     address=TEXT,
                     phone=KEYWORD(commas=True),
-                    webpage=ID,
+                    webpage=ID(stored=True),
                     tags=KEYWORD(commas=True, scorable=True, lowercase=True, stored=True),
                     type=KEYWORD(stored=True, field_boost=1.2, lowercase=True, scorable=True),
                     description=TEXT(field_boost=0.01, stored=True),
@@ -371,6 +374,7 @@ def analyzeQuery(index, query, locationAssistant=None):
     # if its not exact hit (word for word in title), save it for later
     resultHit, exactHit = checkOneHit(index, query)
     if exactHit:
+        # resultHit[0]['score'] = maxScore
         print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'])
         print('-------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
@@ -833,7 +837,7 @@ with open('kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
-results = analyzeQuery(index, 'slovenj gradec')
+results = analyzeQuery(index, 'ljubljanski grad')
 #results = analyzeQuery(index, 'znamenitosti v blizini')
 #results = analyzeQuery(index, 'seznam arhitekture')
 #results = analyzeQuery(index, 'grat')

@@ -43,6 +43,7 @@ def attraction(type=None, id=None):
 
 api = Api(app)
 
+
 class QueryAPI(Resource):
     def get(self, query):
 
@@ -74,5 +75,5 @@ class ItemAPI(Resource):
         return resJson
 
 
-api.add_resource(QueryAPI, '/query/<string:query>', endpoint = 'query')
-api.add_resource(ItemAPI, '/item/<string:type>/<int:id>', endpoint = 'item')
+api.add_resource(QueryAPI, '/query/<string:query>', endpoint='query')
+api.add_resource(ItemAPI, '/item/<string:type>/<int:id>', endpoint='item')

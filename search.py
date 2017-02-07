@@ -480,6 +480,9 @@ def analyzeQuery(index, query, locationAssistant=None):
 
                 gotLocation -= 1
 
+    # set 'exactHit' to True for weighting purposes on client side if hits ain't empty
+    if len(hits) > 0:
+        hits[0]['exactHit'] = True
 
     print('RETURNING:', hits)
     print('-------------------------------------------------------------------------------------------------')
@@ -839,7 +842,7 @@ with open('kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
-results = analyzeQuery(index, 'ljubljanski grad')
+results = analyzeQuery(index, 'seznam jezer')
 #results = analyzeQuery(index, 'znamenitosti v blizini')
 #results = analyzeQuery(index, 'seznam arhitekture')
 #results = analyzeQuery(index, 'grat')

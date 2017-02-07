@@ -28,9 +28,6 @@ specialWords = sorted(['seznam', 'tabela'])
 commonWords = sorted(['kaj', 'kje', 'kako', 'povej', 'mi', 'pokaži', 'veš', 'lahko', 'je', 'prikaži', 'morda', 'tej', 'ali', 'poznaš'])
 prepositions = sorted(['na', 'v', 'ob', 'pri', 's', 'z', 'bližini', 'blizu', 'zraven'])
 
-# scoring for assistant
-maxScore = 5
-minScore = 1
 
 
 # schema for attribute entries
@@ -346,8 +343,8 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
         for i, result in enumerate(results):
             if (result['topResult'] and float(results.score(i)) > 0.5) or (not result['topResult'] and float(results.score(i)) > 0):
                 hasResult = True
-                print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
-                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'webpage': result['webpage'], 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
+                print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], ',', result['webpage'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
+                dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'webpage': result['webpage'], 'exactHit': False, 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
 
         if hasResult == False:
             print('___ NO RESULTS ___')
@@ -357,6 +354,7 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
 
 def analyzeQuery(index, query, locationAssistant=None):
 
+    # search starts here
     print('Original search query:', query, '\n')
 
     # simulating test data
@@ -374,8 +372,11 @@ def analyzeQuery(index, query, locationAssistant=None):
     # if its not exact hit (word for word in title), save it for later
     resultHit, exactHit = checkOneHit(index, query)
     if exactHit:
-        # resultHit[0]['score'] = maxScore
-        print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'])
+        #set a flag for exact hit
+        resultHit[0]['exactHit'] = True
+
+        print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',',
+              resultHit[0]['regionName'], ',', resultHit[0]['type'], ', exactHit:', resultHit[0]['exactHit'])
         print('-------------------------------------------------------------------------------------------------\n\n\n')
         return resultHit
 
@@ -440,7 +441,7 @@ def analyzeQuery(index, query, locationAssistant=None):
     else:
         # since we now know user wants just one hit, we can return the one we saved earlier, from 'findMatch' method
         if len(resultHit) > 0:
-            print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'])
+            print('RETURNING:', resultHit[0]['name'], ',', resultHit[0]['place'], ',', resultHit[0]['destination'], ',', resultHit[0]['regionName'], ',', resultHit[0]['type'], ', exactHit:', resultHit[0]['exactHit'])
 
         else:
             print('RETURNING: no hits :(')
@@ -455,8 +456,8 @@ def analyzeQuery(index, query, locationAssistant=None):
     if len(hits) == 0:
         if limit == 1:
             print('No hits!')
-        # more-than-one-result search
 
+        # more-than-one-result search
         elif limit == 10:
             # returns 3 location filter options: place, destination, region; if there are still no results
             # after applying them, remove location filter completely
@@ -478,6 +479,7 @@ def analyzeQuery(index, query, locationAssistant=None):
                     hits = searchIndex(index, text, limit, filterQuery)
 
                 gotLocation -= 1
+
 
     print('RETURNING:', hits)
     print('-------------------------------------------------------------------------------------------------')

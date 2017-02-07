@@ -636,7 +636,8 @@ def multipleResultsAnalyzer(index, text):
                     for i, location in enumerate(locationList):
                         qp = QueryParser(location, schema=index.schema)
                         qLocation = qp.parse(fullLocation)
-                        corrected = s.correct_query(qLocation, fullLocation, prefix=2, maxdist=2)
+                        corrected = s.correct_query(qLocation, fullLocation, prefix=2, maxdist=2)   # prefix doesn't work..BUG?
+                        print('Location filter suggestion '+location+':', corrected.string)
 
                         if corrected.query != qLocation:
                             analyzedText[j:len(analyzedText)] = corrected.string.split()    # replace location in query with corrected version
@@ -842,7 +843,7 @@ with open('kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
-results = analyzeQuery(index, 'seznam jezer')
+results = analyzeQuery(index, 'seznam rek ob morju')
 #results = analyzeQuery(index, 'znamenitosti v blizini')
 #results = analyzeQuery(index, 'seznam arhitekture')
 #results = analyzeQuery(index, 'grat')
@@ -852,3 +853,4 @@ results = analyzeQuery(index, 'seznam jezer')
 #results = analyzeQuery(index, 'arhitektura ljubljana')
 #results = analyzeQuery(index, 'ljubljna')   #!!!
 
+print(calculatePrefix('morju'))

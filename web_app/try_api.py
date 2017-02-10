@@ -23,14 +23,15 @@ def testQuery(query):
 
     query = urllib.parse.quote(query)
     fullUrl = baseAPIUrl + 'query/' + query
-    response = requests.get(fullUrl)
+    response = requests.get(fullUrl, auth=('asistent', 'projektasistent'))
+    print(response)
     data = response.json()
     print(data)
     print('-----------------------------------------------------------------------------------------------\n')
 
     for key in data:
         if key == '0':
-            print('Hit score:', data[key]['hitScore'])
+            print('Exact hit:', data[key]['exactHit'])
 
         print(data[key]['name'], ',', data[key]['regionName'])
 

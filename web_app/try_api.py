@@ -1,12 +1,10 @@
 import requests
 import urllib
 
-
 baseAPIUrl = 'http://127.0.0.1:5000/'
 
 
 def testItem(type, id):
-
     # get item form DB
 
     fullUrl = baseAPIUrl + 'item/' + type + '/' + str(id)
@@ -16,9 +14,7 @@ def testItem(type, id):
     return
 
 
-
 def testQuery(query):
-
     # get results for given query
 
     query = urllib.parse.quote(query)
@@ -38,6 +34,6 @@ def testQuery(query):
     return
 
 
-#testItem('attraction', 300)
+# testItem('attraction', 300)
 testQuery('ljubljanski grad')
 testQuery('seznam rek v ljubljani')

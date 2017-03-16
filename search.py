@@ -836,10 +836,10 @@ def setDefaultLocationFilter(location, field):
 #init()
 
 # testing search
-index = open_dir("../index")
+#index = open_dir("../index")
 
 # get slovenian towns from file
-with open('../kraji_slovenija', 'rb') as fp:
+with open('kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 

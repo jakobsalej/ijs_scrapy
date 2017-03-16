@@ -61,8 +61,6 @@ def attraction(type=None, id=None):
 
 api = Api(app)
 
-
-
 class QueryAPI(Resource):
 
     @auth.login_required

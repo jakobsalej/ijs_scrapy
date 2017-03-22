@@ -80,6 +80,8 @@ class QueryAPI(Resource):
 
 
 class ItemAPI(Resource):
+
+    @auth.login_required
     def get(self, type, id):
         item = getFromDB(type, id)
         if item == None:

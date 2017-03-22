@@ -8,8 +8,11 @@ def testItem(type, id):
     # get item form DB
 
     fullUrl = baseAPIUrl + 'item/' + type + '/' + str(id)
-    response = requests.get(fullUrl)
-    print(response.json())
+    response = requests.get(fullUrl, auth=('asistent', 'projektasistent'))
+    print(response)
+    data = response.json()
+    print(data['name'], data)
+    print('---------------------------------------------------------------------------\n')
 
     return
 
@@ -27,13 +30,13 @@ def testQuery(query):
 
     for key in data:
         if key == '0':
-            print('Exact hit:', data[key]['exactHit'])
+            print('-> Exact hit:', data[key]['exactHit'])
 
         print(data[key]['name'], ',', data[key]['regionName'])
 
     return
 
 
-# testItem('attraction', 300)
+testItem('attraction', 50)
 testQuery('ljubljanski grad')
-testQuery('seznam rek v ljubljani')
+#testQuery('seznam rek v ljubljani')

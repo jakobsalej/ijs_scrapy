@@ -38,5 +38,5 @@ def testQuery(query):
 
 
 testItem('attraction', 50)
-testQuery('ljubljanski grad')
+testQuery('gorenjska')
 #testQuery('seznam rek v ljubljani')

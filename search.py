@@ -110,6 +110,7 @@ def init():
             id=str(region.id).encode("utf-8").decode("utf-8"),
             name=region.name,
             link=region.link,
+            webpage='',
             description=region.description,
             picture=region.picture,
             regionName=region.name,    # just for displaying results, doesn't matter
@@ -343,7 +344,7 @@ def searchIndex(index, newText, resultLimit=1, filterQuery=None):
         for i, result in enumerate(results):
             if (result['topResult'] and float(results.score(i)) > 0.5) or (not result['topResult'] and float(results.score(i)) > 0):
                 hasResult = True
-                print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], ',', result['webpage'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
+                print(result['name'], ',', result['place'], ',', result['destination'], ',', result['regionName'], ',', result['type'], '; ', 'SCORE:', results.score(i), 'MATCHED TERMS:', result.matched_terms())
                 dict[i] = {'id': result['id'], 'name': result['name'], 'link': result['link'], 'type': result['type'], 'regionName': result['regionName'], 'destination': result['destination'], 'place': result['place'], 'typeID': result['typeID'], 'description': result['description'], 'webpage': result['webpage'], 'exactHit': False, 'suggestion': False, 'suggestionText': None, 'score': results.score(i)}
 
         if hasResult == False:
@@ -836,14 +837,14 @@ def setDefaultLocationFilter(location, field):
 #init()
 
 # testing search
-#index = open_dir("../index")
+#index = open_dir("index")
 
 # get slovenian towns from file
 with open('../kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
-#results = analyzeQuery(index, 'seznam rek ob morju')
+#results = analyzeQuery(index, 'gorenjska')
 #results = analyzeQuery(index, 'znamenitosti v blizini')
 #results = analyzeQuery(index, 'seznam arhitekture')
 #results = analyzeQuery(index, 'grat')

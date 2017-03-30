@@ -1,0 +1,84 @@
+### ijs_scrapy ###
+
+Python 3.5.2
+Flask 0.12
+peewee 2.8.5
+PostgreSQL
+Whoosh 2.7.4
+
+
+Module named "Znamenitosti Slovenije" for IJS Assistant:
+
+- only Slovenian language is supported right now
+- people can search for towns, attractions, places in Slovenia ("Kje je Bled", "Ljubljana", "Ljubljanski grad")
+  -> that returns only one (the best - as per Whoosh scoring system) hit
+
+- module can also return list of hits, if:
+  -> search query has word "seznam" in it ("seznam rek")
+  -> type word is detected in plural ("reke pri Ljubljani", "gradovi na primorskem")
+    --> check DB for all possible type words;  all types are from field "type" in table "attraction" and table "town"
+        (table "region" does not have field "type", so type is hardcoded in Whoosh as "regije")
+
+  -> when searching for list, user can also limit the search to specific area ("... na dolenjskem", "ljubljana reke")
+    --> if nothing is found, then the limit area changes: place -> destination -> region (all items have these fields)
+       ---> example: "reke v ljubljani":
+                1. "ljubljana" matches "place" and filter is set in Whoosh ("place:Ljubljana")
+                2. if no results are found, it sets filter with destination of "Ljubljana" (if available)
+                3. if still no results are found, filter is set to correct "region" (in this case region of "Ljubljana")
+       ---> in case there are still no results, location filter is removed
+    --> if given area (like "reke na primorskem") does not match any of the fields "place", "destination" or "region",
+        general search is applied (searching for "primorskem"); based on the results, only the regions that show up in
+        more than 20% of results (because each item has a region field) are selected and then applied as filters;
+        for example, searching for "primorskem" returns two regions, "obalno kraška" and "goriška"; both are set as
+        filters (OR)
+
+- how does it search (step-by-step): TODO
+
+- once Whoosh builds index file, no calls are actually made directly to DB by this module
+
+
+SETUP:
+  0. Git clone? Create virtualenv and do pip install -r requirements.txt. This will install all the required libraries.
+
+  1. Create a PostgreSQL DB.
+      -> peewee, simple and small ORM (http://docs.peewee-orm.com/en/latest/) was used for all relations with our DB
+      -> to see all the models and how to connect to DB, take a look at the file "models.py"
+
+  2. Run "slovenia_info_scra.py" and get all the data from https://www.slovenia.info/en (does not work anymore as page
+     got redesigned). :((
+
+  3. To make search better, we also use file "kraji_slovenija". It is a list of all the towns in Slovenia, obtained from
+     'http://www.itis.si/Kraji' using "kraji_scra.py". Just run that file, it should still work.
+
+  4. Once DB is filled with data, use it to build Whoosh index. That will allow you to search all the data using
+     super-duper-smart Whoosh (not really).
+      -> to build index, use function init() in "search.py"; you only have to run it once
+
+  5. SEARCH
+     -> it is possible to use search.py without setting up a server. Just do:
+        index = open_dir('../index')                                # open index
+        with open('../kraji_slovenija', 'rb') as fp:                # get slovenian towns from file
+            townsStatic = pickle.load(fp)
+        results = analyzeQuery(index, 'znamenitosti v blizini')     # search
+
+  6. Create a really (really really) simple web page and/or API using Flask (http://flask.pocoo.org/)
+     -> in Terminal, go to /web_app
+     -> run "export FLASK_APP=test_app.py"
+     -> start development server with "flask run" (only capable of handling one req at time)
+
+
+API:
+  - does all the hard work of searching, just send the request and get JSON back
+  - trenutno sta možna dva različna klica, oba vračata json:
+
+    -> klic na whoosh iskanje z user queryjem, npr.: http://127.0.0.1:5000/query/kje+je+bled
+       --> to vrne zadetke iz whoosh indexa (ki je zgrajen vnaprej) in ne direktno iz baze
+
+    -> klic direktno na bazo: http://127.0.0.1:5000/item/<type>/<id>
+       --> type je lahko: "attraction", "town", "region", npr. http://127.0.0.1:5000/item/attraction/25
+       (želimo dobiti atrakcijo z IDjem 25)
+       --> mišljeno je bilo, da bi se iz rezultatov whoosha dobilo type in id zadetka, potem pa naredilo poizvedbo na
+       bazo, vendar pa je sedaj večina polj iz baze tako ali tako vrnjena že z whooshevim objektom, tako da za moj
+       modul klic na bazo ni potreben.
+
+

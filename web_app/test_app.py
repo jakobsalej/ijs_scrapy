@@ -1,8 +1,9 @@
 import sys
 sys.path.append('../')
 
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, make_response, jsonify
 from flask_restful import Resource, Api
+from flask_httpauth import HTTPBasicAuth
 from search import analyzeQuery
 from slovenia_info_scra import getFromDB
 from whoosh.index import open_dir
@@ -10,6 +11,24 @@ import json
 
 
 app = Flask(__name__)
+
+
+# some basic http auth
+
+auth = HTTPBasicAuth()
+
+@auth.get_password
+def get_password(username):
+    if username == 'asistent':
+        return 'projektasistent'
+    return None
+
+@auth.error_handler
+def unauthorized():
+    return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+
+
+# web page
 
 @app.route('/')
 def index():
@@ -38,13 +57,13 @@ def attraction(type=None, id=None):
     return render_template('attraction.html', item=item)
 
 
-
 # simple API
 
 api = Api(app)
 
-
 class QueryAPI(Resource):
+
+    @auth.login_required
     def get(self, query):
 
         # perform a search, calling def from search.py
@@ -61,6 +80,8 @@ class QueryAPI(Resource):
 
 
 class ItemAPI(Resource):
+
+    @auth.login_required
     def get(self, type, id):
         item = getFromDB(type, id)
         if item == None:
@@ -77,3 +98,6 @@ class ItemAPI(Resource):
 
 api.add_resource(QueryAPI, '/query/<string:query>', endpoint='query')
 api.add_resource(ItemAPI, '/item/<string:type>/<int:id>', endpoint='item')
+
+
+

@@ -837,14 +837,14 @@ def setDefaultLocationFilter(location, field):
 #init()
 
 # testing search
-#index = open_dir("index")
+#index = open_dir("../index")
 
 # get slovenian towns from file
 with open('../kraji_slovenija', 'rb') as fp:
     townsStatic = pickle.load(fp)
 
 
-#results = analyzeQuery(index, 'gorenjska')
+#results = analyzeQuery(index, 'seznam rek ob morju')
 #results = analyzeQuery(index, 'znamenitosti v blizini')
 #results = analyzeQuery(index, 'seznam arhitekture')
 #results = analyzeQuery(index, 'grat')
@@ -852,4 +852,4 @@ with open('../kraji_slovenija', 'rb') as fp:
 #results = analyzeQuery(index, 'povej mi kaj o novem mestu') #!!!!
 #results = analyzeQuery(index, 'povej mi kaj o bledu')
 #results = analyzeQuery(index, 'arhitektura ljubljana')
-#results = analyzeQuery(index, 'ljubljna')   #!!!
+#results = analyzeQuery(index, 'ljubljna')

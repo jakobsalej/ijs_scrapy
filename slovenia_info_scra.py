@@ -5,7 +5,6 @@ from models import *
 from playhouse.shortcuts import model_to_dict
 
 
-
 # getting data from webpage www.slovenia.info using lxml and Xpath
 # using ORM 'peewee': http://docs.peewee-orm.com/en/latest/index.html
 # postgreSQL database
@@ -213,7 +212,7 @@ def attractionGroup(group, n):
 
     # get all attraction links for specific group (lakes, rivers,...)
 
-    # save links of the top results (n = 1, group 1 is top results) to array, so we can access it later; TO-DO: works even for attractions ('lepote')?
+    # save links of the top results (n = 1, group 1 is top results) to array, so we can access it later;
     if n == 1:
         topResults = group.xpath('//div[@class="info"]/a[1]/@href')
         #print('adding TOP link:', topResults)
@@ -585,7 +584,7 @@ def townGetData(townUrl, n, numLinks):
         # getting region from DB for foreign key (TO-DO: optimize this?)
         region = getRegion(townRegion[0])
 
-        # check if it's top result with array we saved in the beginning (by comparing the part of urls, after the last '/' - we cannot commpare full urls, they are different)
+        # check if it's top result with array we saved in the beginning (by comparing the part of urls, after the last '/' - we cannot compare full urls, they are different)
         isTopResult = False
         for link in topResults:
             linkID = link.split('/')[-1]

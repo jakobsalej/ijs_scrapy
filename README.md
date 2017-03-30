@@ -7,6 +7,8 @@ PostgreSQL
 Whoosh 2.7.4
 
 
+
+
 Module named "Znamenitosti Slovenije" for IJS Assistant:
 
 - only Slovenian language is supported right now
@@ -22,8 +24,11 @@ Module named "Znamenitosti Slovenije" for IJS Assistant:
   -> when searching for list, user can also limit the search to specific area ("... na dolenjskem", "ljubljana reke")
     --> if nothing is found, then the limit area changes: place -> destination -> region (all items have these fields)
        ---> example: "reke v ljubljani":
+
                 1. "ljubljana" matches "place" and filter is set in Whoosh ("place:Ljubljana")
+
                 2. if no results are found, it sets filter with destination of "Ljubljana" (if available)
+
                 3. if still no results are found, filter is set to correct "region" (in this case region of "Ljubljana")
        ---> in case there are still no results, location filter is removed
     --> if given area (like "reke na primorskem") does not match any of the fields "place", "destination" or "region",
@@ -38,6 +43,7 @@ Module named "Znamenitosti Slovenije" for IJS Assistant:
 
 
 SETUP:
+
   0. Git clone? Create virtualenv and do pip install -r requirements.txt. This will install all the required libraries.
 
   1. Create a PostgreSQL DB.

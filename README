@@ -6,9 +6,13 @@ Current version:
 
 
 Python 3.5.2
+
 Flask 0.12
+
 peewee 2.8.5
+
 PostgreSQL
+
 Whoosh 2.7.4
 
 
@@ -48,6 +52,7 @@ Module named "Znamenitosti Slovenije" for IJS Assistant:
 
 
 SETUP:
+
 
   0. Git clone? Create virtualenv and do pip install -r requirements.txt. This will install all the required libraries.
 

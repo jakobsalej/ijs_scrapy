@@ -1,5 +1,5 @@
 import sys
-from PyQt4 import *
+#from PyQt4 import *
 
 from lxml import html, etree
 import requests
@@ -8,18 +8,18 @@ from models import *
 from playhouse.shortcuts import model_to_dict
 
 
-class Render(QWebPage):
-    def __init__(self, url):
-        self.app = QApplication(sys.argv)
-        QWebPage.__init__(self)
-        self.loadFinished.connect(self._loadFinished)
-        self.mainFrame().load(QUrl(url))
-        self.app.exec_()
 
-    def _loadFinished(self, result):
-        self.frame = self.mainFrame()
-        self.app.quit()
+#class Render(QWebPage):
+#    def __init__(self, url):
+#        self.app = QApplication(sys.argv)
+#        QWebPage.__init__(self)
+#        self.loadFinished.connect(self._loadFinished)
+#        self.mainFrame().load(QUrl(url))
+#        self.app.exec_()
 
+#    def _loadFinished(self, result):
+#        self.frame = self.mainFrame()
+#        self.app.quit()
 
 
 # getting data from webpage www.slovenia.info using lxml and Xpath
@@ -701,12 +701,12 @@ def join(url):
 
 # starting
 prepareLogFiles()
-db = connectDB()
-db.connect()
+#db = connectDB()
+#db.connect()
 #initDB(db)
 
 # start with all regions, then  add towns
 selectRegion()
 #addTowns()
 
-db.close()
+#db.close()

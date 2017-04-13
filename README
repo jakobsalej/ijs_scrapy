@@ -1,18 +1,14 @@
 ### ijs_scrapy ###
 
 
-Author:
-Current version:
+Author: Jakob Šalej
+Current version: 0.2?
 
 
 Python 3.5.2
-
 Flask 0.12
-
 peewee 2.8.5
-
 PostgreSQL
-
 Whoosh 2.7.4
 
 
@@ -84,7 +80,7 @@ SETUP:
 
 
 API:
-  - does all the hard work of searching, just send the request and get JSON back
+  - send the request and get JSON back
   - trenutno sta možna dva različna klica, oba vračata json:
 
     -> klic na whoosh iskanje z user queryjem, npr.: http://127.0.0.1:5000/query/kje+je+bled

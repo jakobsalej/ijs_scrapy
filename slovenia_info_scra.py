@@ -1,3 +1,6 @@
+import sys
+from PyQt4 import *
+
 from lxml import html, etree
 import requests
 import time
@@ -5,12 +8,30 @@ from models import *
 from playhouse.shortcuts import model_to_dict
 
 
+class Render(QWebPage):
+    def __init__(self, url):
+        self.app = QApplication(sys.argv)
+        QWebPage.__init__(self)
+        self.loadFinished.connect(self._loadFinished)
+        self.mainFrame().load(QUrl(url))
+        self.app.exec_()
+
+    def _loadFinished(self, result):
+        self.frame = self.mainFrame()
+        self.app.quit()
+
+
+
 # getting data from webpage www.slovenia.info using lxml and Xpath
 # using ORM 'peewee': http://docs.peewee-orm.com/en/latest/index.html
 # postgreSQL database
 
-baseUrl = "http://www.slovenia.info"
-baseUrlPictures = "http://www.slovenia.info/"
+webArchiveUrl = "https://web.archive.org/web/20161101142703/"
+# baseUrl = "http://www.slovenia.info"
+# baseUrlPictures = "http://www.slovenia.info/"
+baseUrl = "https://web.archive.org/web/20161101142703"
+baseUrlPictures = "https://web.archive.org/web/20161101142703/"
+
 topResults = []
 
 regionLog = None
@@ -18,7 +39,7 @@ attrLog = None
 townLog = None
 
 # select language: 1 = SLO, 2 = English, 3 = Deutsch, 4 = Italiano, 5 = Français, 6 = Pусский, 7 = Español
-lng = 1
+lng = 2
 
 
 
@@ -117,11 +138,16 @@ def selectRegion():
         'http://www.slovenia.info/si/Regije/Zasavska.htm?_ctg_regije=12&lng='
     ]
 
-    for region in regions:
+    regionsArchive = [
+        'https://web.archive.org/web/20160406000815/http://www.slovenia.info/en/Regions/The-Gorenjska-region.htm?_ctg_regije=21&lng='
+    ]
+
+    for region in regionsArchive:
         # wait 0.3 sec
         time.sleep(.300)
         # adding lng param
         region = region + str(lng)
+
         regionGetData(region)
 
     return
@@ -131,7 +157,7 @@ def selectRegion():
 def regionGetData(regionUrl):
 
     # get data from individual region
-    #print('region:', regionUrl)
+    print('region:', regionUrl)
     
     try:
         page = requests.get(regionUrl)
@@ -148,20 +174,20 @@ def regionGetData(regionUrl):
         descriptionFixed = fixLinks(description[0])
 
         description = etree.tostring(descriptionFixed)
-        #print('data:', description)
+        print('data:', description)
 
         # picture link
         pictureLink = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
         if len(pictureLink) > 0:
             pictureLink = baseUrlPictures + pictureLink[0]
-        #print('link to picture:', pictureLink)
+        print('link to picture:', pictureLink)
 
         # attractions link
         attrLinks = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[1]/div[4]/a[4]/@href')
         if len(attrLinks) > 0:
             attrLinks = attrLinks[0]
-        #print('attractions:', attrLinks)
-        #print('----------------------------------------\n')
+        print('attractions:', attrLinks)
+        print('----------------------------------------\n')
 
         #saving to db
         if Region.select().where(Region.name == name[0]).exists():
@@ -236,7 +262,7 @@ def attractionGroup(group, n):
     # we don't need to 'click' on the first link (we already have those attractions, they are shown by default)
     count = 0
     for pageLinks in group.iterfind('div[@class="subbox"]/div[@class="paging"]/div[@class="links"]/a'):
-        #print("Page link found:", pageLinks.tag, pageLinks.attrib['href'])
+        print("Page link found:", pageLinks.tag, pageLinks.attrib['href'])
 
         if count != 0:
             # wait 0.3 sec
@@ -245,7 +271,7 @@ def attractionGroup(group, n):
             # adding links from page 2, 3, .. of selected group
             attractionsPage = attrGroupSubPage(pageLinks.attrib['href'], groupId)
             attrLinksList.extend(attractionsPage)
-            #print('number of attractions in group:', len(attrLinksList))
+            print('number of attractions in group:', len(attrLinksList))
 
         count += 1
 
@@ -336,14 +362,14 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
 
         # in case link is split, we have to merge it
         attractionWebpage = ''.join(attractionWebpage)
-        #print("webpage:", attractionWebpage)
+        print("webpage:", attractionWebpage)
 
         # webpage path to attraction, we remove the first one as its always "Domov" and save the one before last as it tells as type of attraction
         attractionNavPath = tree.xpath('//*[@id="tdMainCenter"]/div[1]//a/text()')
         attractionType = attractionNavPath[len(attractionNavPath)-2]
         attractionNavPath.pop(0)
         attractionNavPath = ','.join(attractionNavPath)
-        #print("navigation path:", attractionNavPath)
+        print("navigation path:", attractionNavPath)
 
         # description:
         attractionDescription = elTree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]')
@@ -363,7 +389,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
         # find all relative links in description and replace them with absolute ones
         attractionDescriptionFixed = fixLinks(attractionDescription[0])
         content = etree.tostring(attractionDescriptionFixed)
-        #print("description:", content)
+        print("description:", content)
 
         # main picture: (we have to merge it with base url for full picture url)
         attractionPictureMain = tree.xpath('//*[@id="tdMainCenter"]/div[3]/div[2]/div[1]/a/img/@src')
@@ -377,7 +403,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
             attractionRegion = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row region"]/text()')
             if len(attractionRegion) == 0:
                 attractionRegion = ['']
-        #print("region:", attractionRegion)
+        print("region:", attractionRegion)
 
         # destination
         attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/a/text()')
@@ -385,7 +411,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
             attractionDestination = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row destination"]/text()')
             if len(attractionDestination) == 0:
                 attractionDestination = ['']
-        #print("destination:", attractionDestination)
+        print("destination:", attractionDestination)
 
         # place
         attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/a/text()')
@@ -393,7 +419,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
             attractionPlace = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row place"]/text()')
             if len(attractionPlace) == 0:
                 attractionPlace = ['']
-        #print("place:", attractionPlace)
+        print("place:", attractionPlace)
 
         # GPS coordinates
         attractionGPS = tree.xpath('//*[@id="wpMapSmall"]/div[2]/div[@class="row gps"]/a/text()')
@@ -415,9 +441,9 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
                 isTopResult = True
                 break
 
-        #print('Top result:', isTopResult)
+        print('Top result:', isTopResult)
 
-        #print('------------------------------------------\n')
+        print('------------------------------------------\n')
 
         # saving to DB
         if Attraction.select().where(Attraction.name == attractionName[0], Attraction.regionName == attractionRegion[0]).exists():
@@ -439,7 +465,7 @@ def attractionGetData(attractionUrl, regionObject, n, numLinks):
                                  topResult = isTopResult
                                  )
     
-            newAttr.save()
+            #newAttr.save()
 
     except Exception as e:
         print('EXCEPTION: ', str(e))
@@ -655,13 +681,14 @@ def join(url):
 
     # join relative URL with base URL
 
+    print('Original link:', url)
     if url.startswith("/") and not ("://" in url):
         # if it starts with /
-        #print('Fixing:', (baseUrl+url))
+        print('Fixing:', (baseUrl+url))
         return baseUrl + url
     elif not ("://" in url or url.startswith("www")):
         # if it doesn't start with /
-        #print('Fixing:', (baseUrlPictures + url))
+        print('Fixing:', (baseUrlPictures + url))
         return baseUrlPictures + url
     elif url.startswith("www"):
         return 'http://' + url
@@ -673,13 +700,13 @@ def join(url):
 
 
 # starting
-#prepareLogFiles()
+prepareLogFiles()
 db = connectDB()
 db.connect()
 #initDB(db)
 
 # start with all regions, then  add towns
-#selectRegion()
+selectRegion()
 #addTowns()
 
 db.close()

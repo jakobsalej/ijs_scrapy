@@ -5,7 +5,7 @@ import datetime
 
 def connectDB():
     db = PostgresqlDatabase(
-        'slovenia_db',
+        'slovenia_db_eng',
         user='adminslo',
         password='slo',
         host='localhost',
